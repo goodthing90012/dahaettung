@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다했텅 - Da Haet Tung</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#22B07D">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="다했텅">
+    <style>
+        :root {
+            --primary: #22B07D;
+            --primary-dark: #1B8F66;
+            --primary-tint: #E8F8F1;
+            --bg: #F6F9F7;
+            --card: #FFFFFF;
+            --text: #2B2B2B;
+            --gray: #888888;
+            --light-gray: #EEE;
+            --accent: #FF7A3D;
+            --sub-tab-bg: #E9ECEA;
+            --danger: #FF3B30;
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        html, body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg); margin: 0; height: 100%; color: var(--text); }
+
+        .phone-mockup { width: 100%; height: 100vh; background-color: var(--bg); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+
+        .header { background-color: var(--card); padding: 10px 16px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; align-items: center; justify-content: center; position: sticky; top: 0; z-index: 20; }
+        .header-brand { display: flex; align-items: center; gap: 7px; font-weight: 800; font-size: 21px; color: var(--primary); letter-spacing: -0.5px; }
+        .header-brand .mascot { font-size: 20px; }
+        .header .subtitle { color: #111; font-weight: 400; font-size: 11px; margin-top: 2px; opacity: 0.5; }
+
+        .content { padding: 16px; flex: 1; overflow-y: auto; display: none; -webkit-overflow-scrolling: touch; }
+        .content.active { display: block; }
+
+        .card { background: var(--card); padding: 14px; border-radius: 16px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .section-title { font-size: 13px; color: var(--gray); margin-bottom: 8px; font-weight: bold; }
+
+        .form-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 10px; box-sizing: border-box; font-size: 14px; background-color: #fff; color: #333; font-family: inherit; }
+        textarea { resize: none; }
+        label.fld { font-size: 11px; font-weight: bold; color: var(--gray); display: block; margin-bottom: 4px; }
+
+        .btn { border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 14px; padding: 12px; }
+        .btn-primary { background-color: var(--primary); color: white; width: 100%; }
+        .btn-ghost { background: var(--primary-tint); color: var(--primary-dark); }
+        .btn-sm { font-size: 12px; padding: 7px 12px; border-radius: 9px; }
+
+        /* 요약 카드 */
+        .summary-card { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 18px; border-radius: 18px; margin-bottom: 14px; box-shadow: 0 6px 16px rgba(34,176,125,0.25); }
+        .summary-row { display: flex; gap: 12px; }
+        .summary-box { flex: 1; text-align: center; }
+        .summary-num { font-size: 30px; font-weight: 900; line-height: 1; }
+        .summary-lbl { font-size: 11px; opacity: 0.9; margin-top: 5px; }
+        .summary-divider { width: 1px; background: rgba(255,255,255,0.3); }
+        .briefing-preview { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.25); font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; }
+        .briefing-preview .go { opacity: 0.85; }
+
+        /* 브리핑 상세 */
+        .brief-sec-title { font-size: 13px; font-weight: bold; color: var(--text); margin: 12px 0 6px; }
+        .brief-sec-title:first-child { margin-top: 0; }
+        .brief-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid #f2f2f2; font-size: 13px; cursor: pointer; }
+        .brief-row:active { background: #f7f7f7; }
+        .brief-carry { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FFF7F1; border: 1px solid #FBEADD; border-radius: 10px; padding: 8px 10px; margin-top: 8px; font-size: 12px; }
+        .brief-carry button { background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 6px 10px; cursor: pointer; flex-shrink: 0; }
+        .brief-empty { font-size: 12px; color: #bbb; padding: 8px 4px; }
+
+        /* 달력 */
+        .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .cal-nav-btn { background: none; border: none; font-size: 20px; color: #666; cursor: pointer; padding: 2px 10px; }
+        .cal-month { font-size: 14px; font-weight: bold; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; text-align: center; }
+        .cal-dow { font-size: 10px; color: #AAA; padding: 4px 0; }
+        .cal-cell { position: relative; padding: 3px 1px 6px; border-radius: 8px; font-size: 11px; min-height: 46px; display: flex; flex-direction: column; align-items: center; cursor: pointer; box-sizing: border-box; }
+        .cal-cell .daynum { line-height: 1; }
+        .cal-mark { font-size: 15px; line-height: 1; margin-top: 1px; height: 17px; }
+        .cal-char { height: 21px; width: auto; display: block; margin-top: 1px; }
+        .cal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); margin-top: 3px; }
+        .cal-bars { position: absolute; left: 2px; right: 2px; bottom: 2px; display: flex; flex-direction: column; gap: 1px; }
+        .cal-bar { height: 3px; }
+        .cal-today { background: var(--primary); color: white; font-weight: bold; }
+
+        .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 10px; color: var(--gray); margin-top: 10px; justify-content: center; }
+        .legend span { display: inline-flex; align-items: center; gap: 3px; }
+
+        /* 체크 탭 날짜 네비 */
+        .date-nav { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--card); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .date-nav button { background: none; border: none; font-size: 20px; color: #555; cursor: pointer; padding: 2px 8px; }
+        .date-nav .lbl { font-size: 14px; font-weight: bold; min-width: 150px; text-align: center; }
+
+        /* 체크 리스트 아이템 */
+        .check-item { display: flex; align-items: center; gap: 10px; padding: 11px 6px; border-bottom: 1px solid #f2f2f2; }
+        .check-item:last-child { border-bottom: none; }
+        .check-box { width: 24px; height: 24px; border-radius: 8px; border: 2px solid #ccc; flex-shrink: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; color: white; transition: 0.12s; }
+        .check-box.done { background: var(--primary); border-color: var(--primary); }
+        .check-name { flex: 1; font-size: 14px; }
+        .check-name.done { color: #aaa; text-decoration: line-through; }
+        .check-emoji { font-size: 16px; }
+        .proj-header { display: flex; align-items: center; gap: 7px; font-weight: bold; font-size: 13px; margin: 4px 0 2px; }
+        .proj-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .mini-add { background: none; border: 1px dashed #ccc; color: #999; border-radius: 8px; font-size: 12px; padding: 6px 10px; cursor: pointer; margin-top: 6px; width: 100%; }
+
+        /* 관리 리스트 */
+        .mng-item { display: flex; align-items: flex-start; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid #f2f2f2; }
+        .mng-item:last-child { border-bottom: none; }
+        .mng-info { flex: 1; }
+        .mng-name { font-weight: bold; font-size: 14px; }
+        .mng-sub { font-size: 11px; color: var(--gray); margin-top: 3px; }
+        .mng-actions { display: flex; gap: 4px; flex-shrink: 0; }
+        .icon-btn { background: #F1F1F1; border: none; border-radius: 8px; font-size: 11px; padding: 5px 8px; cursor: pointer; color: #555; font-weight: bold; }
+        .icon-btn.del { background: #FFEBEB; color: var(--danger); }
+        .memo-chip { font-size: 11px; color: #666; background: #F6F6F6; border-radius: 8px; padding: 4px 8px; margin-top: 4px; display: flex; justify-content: space-between; gap: 6px; }
+        .memo-add { background: none; border: 1px dashed #ddd; color: #aaa; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; margin-top: 4px; }
+        .color-picker { display: flex; gap: 8px; margin-top: 4px; }
+        .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; }
+        .color-swatch.sel { border-color: #333; }
+
+        .empty { text-align: center; color: #bbb; font-size: 13px; padding: 22px 0; }
+
+        /* 이 날 할 일 영역 구분 */
+        .task-group-title { font-size: 12px; font-weight: bold; color: var(--gray); margin: 4px 0 6px; display: flex; align-items: center; gap: 5px; }
+        .task-group { margin-bottom: 14px; }
+        .task-group:last-child { margin-bottom: 0; }
+        .proj-block { background: #F7F9F8; border: 1px solid #EEF1F0; border-radius: 12px; padding: 8px 10px; margin-bottom: 8px; }
+        .proj-block:last-child { margin-bottom: 0; }
+        .standalone-block { background: #FFF7F1; border: 1px solid #FBEADD; border-radius: 12px; padding: 4px 10px; }
+
+        /* 탭바 */
+        .tab-bar { background: var(--card); border-top: 1px solid var(--light-gray); display: flex; height: 60px; z-index: 20; }
+        .tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; color: var(--gray); cursor: pointer; font-weight: bold; }
+        .tab-item.active { color: var(--primary); }
+        .tab-icon { font-size: 19px; margin-bottom: 2px; }
+
+        /* 오버레이 */
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 999; align-items: center; justify-content: center; padding: 20px; }
+        .overlay.active { display: flex; }
+        .modal { background: var(--card); border-radius: 18px; padding: 20px; width: 100%; max-width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); max-height: 85vh; overflow-y: auto; }
+        .modal h3 { margin: 0 0 14px; font-size: 15px; }
+        .modal-btn-row { display: flex; gap: 10px; margin-top: 16px; }
+        .modal-btn { flex: 1; padding: 11px; border-radius: 10px; border: none; font-weight: bold; font-size: 13px; cursor: pointer; }
+        .modal-btn.no { background: #F0F0F0; color: #555; }
+        .modal-btn.yes { background: var(--primary); color: white; }
+        .modal-btn.danger { background: var(--danger); color: white; }
+
+        .detail-list { max-height: 60vh; overflow-y: auto; }
+        .detail-row { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid #f2f2f2; cursor: pointer; }
+        .detail-row:active { background: #f7f7f7; }
+
+        .toast { position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); color: white; padding: 12px 20px; border-radius: 24px; font-size: 13px; display: none; z-index: 1000; text-align: center; width: 80%; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+<div class="phone-mockup">
+    <div class="header">
+        <img src="logo.png" alt="다했텅 - 루텅이의 일정관리" style="height:46px; width:auto; display:block;">
+    </div>
+
+    <!-- 홈 -->
+    <div id="tab-home" class="content active">
+        <div class="summary-card" onclick="openBriefing()" style="cursor:pointer;">
+            <div class="summary-row">
+                <div class="summary-box">
+                    <div class="summary-num" id="homeTodayDone">0<span style="font-size:15px;">/<span id="homeTodayTotal">0</span></span></div>
+                    <div class="summary-lbl">오늘 루틴 달성</div>
+                </div>
+                <div class="summary-divider"></div>
+                <div class="summary-box">
+                    <div class="summary-num" id="homeProjPct">–</div>
+                    <div class="summary-lbl">📁 진행 프로젝트 달성</div>
+                </div>
+            </div>
+            <div class="briefing-preview" id="briefingPreview"></div>
+        </div>
+
+        <div class="card">
+            <div class="cal-head">
+                <button class="cal-nav-btn" onclick="changeMonth(-1)">‹</button>
+                <div class="cal-month" id="calMonthLabel"></div>
+                <button class="cal-nav-btn" onclick="changeMonth(1)">›</button>
+            </div>
+            <div id="calGrid"></div>
+            <div class="legend">
+                <span><img src="char-allclear.png" style="height:14px; width:auto; vertical-align:middle;"> 루틴 올클리어</span>
+                <span><span class="cal-dot" style="width:7px;height:7px;"></span> 일부 완료</span>
+                <span><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;"></span> 할 일 있음</span>
+                <span><span class="cal-bar" style="width:14px;background:#4C6EF5;border-radius:2px;"></span> 프로젝트 기간</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 체크 -->
+    <div id="tab-check" class="content">
+        <div class="date-nav">
+            <button onclick="changeCheckDate(-1)">‹</button>
+            <div class="lbl" id="checkDateLabel"></div>
+            <button onclick="changeCheckDate(1)" id="checkDateNext">›</button>
+        </div>
+
+        <div class="card">
+            <div class="section-title" id="routineChecklistTitle">오늘의 루틴</div>
+            <div id="routineChecklist"></div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">📝 이 날 할 일</div>
+            <div id="dayTaskList"></div>
+        </div>
+    </div>
+
+    <!-- 관리 -->
+    <div id="tab-manage" class="content">
+        <div class="card">
+            <div class="section-title">💚 내 루틴</div>
+            <div class="form-row">
+                <input type="text" id="newRoutineEmoji" placeholder="🌅" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
+                <input type="text" id="newRoutineName" placeholder="루틴 이름 (예: 아침 스트레칭)" style="flex:1;">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="addRoutine()">루틴 추가</button>
+            <div id="routineMngList" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">📁 프로젝트 · 일정</div>
+            <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="openProjectModal()">+ 새 프로젝트 / 일정 추가</button>
+            <div id="projectMngList" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
+    <!-- 설정 -->
+    <div id="tab-settings" class="content">
+        <div class="card">
+            <div class="section-title">💾 데이터 백업</div>
+            <p style="font-size:12px; color:#666; line-height:1.6; margin:0 0 12px;">
+                모든 루틴과 프로젝트 기록을 파일로 내려받아 보관하고, 언제든 다시 불러올 수 있어요. 기기를 바꾸거나 앱을 지우기 전에 백업해 두세요.
+            </p>
+            <button class="btn btn-primary" style="margin-bottom:8px;" onclick="exportBackup()">백업 파일 내려받기</button>
+            <button class="btn btn-ghost" style="width:100%;" onclick="document.getElementById('backupFileInput').click()">백업 파일 불러오기</button>
+            <input type="file" id="backupFileInput" accept="application/json" style="display:none;" onchange="importBackup(this.files[0])">
+            <div style="font-size:11px; color:#aaa; margin-top:10px;">마지막 저장: <span id="lastSavedAt">-</span></div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">💚 다했텅 소개</div>
+            <p style="font-size:12px; color:#666; line-height:1.6; margin:0;">
+                다했텅은 다썼텅의 자매 앱이에요. 매일 반복하는 <b>루틴</b>과 기간을 가진 <b>프로젝트·일정</b>을 한곳에서 기록하고, 달력에서 한눈에 확인해요. 루텅이가 오늘의 완료를 응원해요.
+            </p>
+        </div>
+    </div>
+
+    <div class="tab-bar">
+        <div class="tab-item active" id="btn-home" onclick="switchTab('home')"><span class="tab-icon">🏠</span><span>홈</span></div>
+        <div class="tab-item" id="btn-check" onclick="switchTab('check')"><span class="tab-icon">✅</span><span>체크</span></div>
+        <div class="tab-item" id="btn-manage" onclick="switchTab('manage')"><span class="tab-icon">🗂️</span><span>관리</span></div>
+        <div class="tab-item" id="btn-settings" onclick="switchTab('settings')"><span class="tab-icon">⚙️</span><span>설정</span></div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+</div>
+
+<!-- 루틴 수정 모달 -->
+<div class="overlay" id="routineEditOverlay">
+    <div class="modal">
+        <h3>루틴 수정</h3>
+        <div class="form-row">
+            <input type="text" id="editRoutineEmoji" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
+            <input type="text" id="editRoutineName" placeholder="루틴 이름" style="flex:1;">
+        </div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('routineEditOverlay')">취소</button>
+            <button class="modal-btn yes" onclick="saveEditRoutine()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 프로젝트 추가/수정 모달 -->
+<div class="overlay" id="projectOverlay">
+    <div class="modal">
+        <h3 id="projectModalTitle">새 프로젝트 / 일정</h3>
+        <div class="form-row">
+            <input type="text" id="projEmoji" maxlength="2" placeholder="📁" style="width:52px; text-align:center; flex:0 0 52px;">
+            <input type="text" id="projName" placeholder="이름 (예: 이사 준비, 여행)" style="flex:1;">
+        </div>
+        <label class="fld">기간</label>
+        <div class="form-row">
+            <input type="date" id="projStart">
+            <input type="date" id="projEnd">
+        </div>
+        <label class="fld">색상</label>
+        <div class="color-picker" id="projColorPicker"></div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('projectOverlay')">취소</button>
+            <button class="modal-btn yes" onclick="saveProject()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 할 일(태스크) 추가 모달 -->
+<div class="overlay" id="taskOverlay">
+    <div class="modal">
+        <h3 id="taskModalTitle">할 일 추가</h3>
+        <input type="text" id="taskName" placeholder="할 일 내용" style="margin-bottom:6px;">
+        <div id="taskDateGroup">
+            <label class="fld">날짜</label>
+            <input type="date" id="taskDate">
+        </div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('taskOverlay')">취소</button>
+            <button class="modal-btn yes" onclick="saveTask()">추가</button>
+        </div>
+    </div>
+</div>
+
+<!-- 메모 모달 -->
+<div class="overlay" id="memoOverlay">
+    <div class="modal">
+        <h3>메모 추가</h3>
+        <label class="fld">날짜</label>
+        <input type="date" id="memoDate" style="margin-bottom:8px;">
+        <textarea id="memoText" maxlength="150" rows="3" placeholder="메모 내용을 입력하세요"></textarea>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('memoOverlay')">취소</button>
+            <button class="modal-btn yes" onclick="saveMemo()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 공통 확인 모달 -->
+<div class="overlay" id="confirmOverlay">
+    <div class="modal">
+        <h3 id="confirmText" style="text-align:center; font-weight:bold;"></h3>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('confirmOverlay')">아니오</button>
+            <button class="modal-btn danger" id="confirmYesBtn">예</button>
+        </div>
+    </div>
+</div>
+
+<!-- 날짜 상세 팝업 -->
+<div class="overlay" id="dateDetailOverlay">
+    <div class="modal">
+        <h3 id="dateDetailTitle"></h3>
+        <div class="detail-list" id="dateDetailList"></div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('dateDetailOverlay')">닫기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 오늘 브리핑 팝업 -->
+<div class="overlay" id="briefingOverlay">
+    <div class="modal" style="max-width:340px;">
+        <h3 id="briefingTitle">오늘 브리핑</h3>
+        <div id="briefingBody" style="max-height:60vh; overflow-y:auto;"></div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('briefingOverlay')">닫기</button>
+            <button class="modal-btn yes" onclick="copyBriefing()">📋 복사</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ══════════ 날짜 헬퍼 ══════════
+    const getTodayTimeline = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+    const formatDateString = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+    const parseDate = (s) => { const p = String(s).split('-'); return new Date(+p[0], +p[1]-1, +p[2]).getTime(); };
+    const getTodayStr = () => formatDateString(getTodayTimeline());
+    const addDaysStr = (dateStr, n) => formatDateString(parseDate(dateStr) + n*86400000);
+    const krLabel = (dateStr) => { const d = new Date(parseDate(dateStr)); const w=['일','월','화','수','목','금','토'][d.getDay()]; return `${d.getMonth()+1}월 ${d.getDate()}일 (${w})`; };
+
+    // ══════════ 저장소 ══════════
+    const STORAGE_KEY = 'dahaettung_data_v1';
+    const PROJECT_COLORS = ['#4C6EF5', '#22B07D', '#FF7A3D', '#E64980', '#7C5CFF', '#F0A500'];
+
+    function loadFromStorage() {
+        try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; }
+        catch (e) { console.error('로드 실패', e); return null; }
+    }
+    function saveToStorage() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks }));
+            localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
+            updateLastSavedLabel();
+        } catch (e) {
+            console.error('저장 실패', e);
+            showToast('⚠️ 저장 공간이 부족해요');
+        }
+    }
+    function updateLastSavedLabel() {
+        const el = document.getElementById('lastSavedAt'); if (!el) return;
+        const t = localStorage.getItem(STORAGE_KEY + '_savedAt');
+        if (!t) { el.textContent = '-'; return; }
+        const d = new Date(+t);
+        el.textContent = `${formatDateString(+t)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+
+    const saved = loadFromStorage();
+    let routines = (saved && Array.isArray(saved.routines)) ? saved.routines : [];
+    let projects = (saved && Array.isArray(saved.projects)) ? saved.projects : [];
+    let standaloneTasks = (saved && Array.isArray(saved.standaloneTasks)) ? saved.standaloneTasks : [];
+
+    // ══════════ 완료 판정 · 스트릭 ══════════
+    function isRoutineDayDone(dateStr) {
+        return routines.some(r => (r.checkHistory || []).includes(dateStr));
+    }
+    function isRoutineDayAllClear(dateStr) {
+        if (routines.length === 0) return false;
+        return routines.every(r => (r.checkHistory || []).includes(dateStr));
+    }
+    function countRoutineDone(dateStr) {
+        return routines.filter(r => (r.checkHistory || []).includes(dateStr)).length;
+    }
+    function projectActiveOn(p, dateStr) {
+        return p.startDate <= dateStr && dateStr <= p.endDate;
+    }
+    function projectProgress(p) {
+        const total = (p.tasks || []).length;
+        const done = (p.tasks || []).filter(t => t.done).length;
+        return { done, total };
+    }
+
+    // ══════════ 렌더 파이프라인 ══════════
+    function syncAll() {
+        saveToStorage();
+        renderCheckTab();
+        renderRoutineMng();
+        renderProjectMng();
+        if (document.getElementById('tab-home').classList.contains('active')) renderHome();
+    }
+
+    let currentTab = 'home';
+    function switchTab(name) {
+        currentTab = name;
+        ['home','check','manage','settings'].forEach(t => {
+            document.getElementById('tab-' + t).classList.toggle('active', t === name);
+            document.getElementById('btn-' + t).classList.toggle('active', t === name);
+        });
+        document.getElementById('tab-' + name).scrollTop = 0;
+        if (name === 'home') renderHome();
+        if (name === 'check') renderCheckTab();
+        if (name === 'manage') { renderRoutineMng(); renderProjectMng(); }
+        if (name === 'settings') updateLastSavedLabel();
+    }
+
+    // ══════════ 홈 · 달력 ══════════
+    let calYear = new Date().getFullYear(), calMonth = new Date().getMonth();
+    function changeMonth(dir) {
+        calMonth += dir;
+        if (calMonth < 0) { calMonth = 11; calYear--; }
+        if (calMonth > 11) { calMonth = 0; calYear++; }
+        renderHome();
+    }
+    function getActiveProjectPct() {
+        const today = getTodayStr();
+        let done = 0, total = 0;
+        projects.filter(p => projectActiveOn(p, today)).forEach(p => (p.tasks || []).forEach(t => { total++; if (t.done) done++; }));
+        return total === 0 ? null : Math.round(done / total * 100);
+    }
+    function renderHome() {
+        const todayStr = getTodayStr();
+        document.getElementById('homeTodayDone').firstChild.textContent = countRoutineDone(todayStr);
+        document.getElementById('homeTodayTotal').textContent = routines.length;
+        const pct = getActiveProjectPct();
+        document.getElementById('homeProjPct').textContent = pct === null ? '–' : pct + '%';
+        const yItems = collectDayItems(getYesterdayStr());
+        const tItems = collectDayItems(getTodayStr());
+        document.getElementById('briefingPreview').innerHTML =
+            `<span>어제 ${countDone(yItems)}/${yItems.length} · 오늘 ${countDone(tItems)}/${tItems.length}</span><span class="go">브리핑 보기 ›</span>`;
+        renderCalendar();
+    }
+    function renderCalendar() {
+        const el = document.getElementById('calGrid');
+        document.getElementById('calMonthLabel').textContent = `${calYear}년 ${calMonth+1}월`;
+        const firstDay = new Date(calYear, calMonth, 1).getDay();
+        const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+        const todayStr = getTodayStr();
+
+        let html = '<div class="cal-grid">';
+        ['일','월','화','수','목','금','토'].forEach(d => html += `<div class="cal-dow">${d}</div>`);
+        for (let i = 0; i < firstDay; i++) html += '<div></div>';
+
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const isToday = dateStr === todayStr;
+
+            let mark = '';
+            if (isRoutineDayAllClear(dateStr)) mark = '<img class="cal-char" src="char-allclear.png" alt="올클리어">';
+            else if (isRoutineDayDone(dateStr)) mark = '<div class="cal-dot"></div>';
+
+            const hasStandalone = standaloneTasks.some(t => t.date === dateStr);
+            const taskDot = hasStandalone ? '<div style="position:absolute; top:3px; right:4px; width:5px; height:5px; border-radius:50%; background:var(--accent);"></div>' : '';
+
+            const dayProjects = projects.filter(p => projectActiveOn(p, dateStr)).slice(0, 3);
+            let bars = '';
+            if (dayProjects.length) {
+                bars = '<div class="cal-bars">' + dayProjects.map(p => {
+                    const isStart = p.startDate === dateStr, isEnd = p.endDate === dateStr;
+                    const radius = `${isStart ? '3px' : '0'} ${isEnd ? '3px' : '0'} ${isEnd ? '3px' : '0'} ${isStart ? '3px' : '0'}`;
+                    return `<div class="cal-bar" style="background:${p.color}; border-radius:${radius};"></div>`;
+                }).join('') + '</div>';
+            }
+
+            html += `<div class="cal-cell ${isToday?'cal-today':''}" onclick="showDateDetail('${dateStr}')">
+                <div class="daynum">${d}</div>${mark}${taskDot}${bars}
+            </div>`;
+        }
+        html += '</div>';
+        el.innerHTML = html;
+    }
+
+    // 날짜 상세 팝업
+    function showDateDetail(dateStr) {
+        document.getElementById('dateDetailTitle').textContent = krLabel(dateStr);
+        const listEl = document.getElementById('dateDetailList');
+        let rows = '';
+
+        routines.forEach(r => {
+            const done = (r.checkHistory || []).includes(dateStr);
+            rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')">
+                <span>${done ? '💚' : '⬜'}</span>
+                <span class="check-emoji">${r.emoji||'💚'}</span>
+                <span style="flex:1; ${done?'color:#aaa;':''}">${escapeHtml(r.name)}</span>
+            </div>`;
+        });
+        const dayStandalone = standaloneTasks.filter(t => t.date === dateStr);
+        if (dayStandalone.length) {
+            rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📝</span><span style="flex:1;">이 날 할 일</span></div>`;
+            dayStandalone.forEach(t => {
+                rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="padding-left:22px;">
+                    <span>${t.done ? '✅' : '⬜'}</span>
+                    <span style="flex:1; font-size:13px; ${t.done?'color:#aaa;':''}">${escapeHtml(t.name)}</span>
+                </div>`;
+            });
+        }
+        projects.filter(p => projectActiveOn(p, dateStr)).forEach(p => {
+            const dayTasks = (p.tasks || []).filter(t => t.date === dateStr);
+            rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="font-weight:bold;">
+                <span class="proj-color-dot" style="background:${p.color};"></span>
+                <span class="check-emoji">${p.emoji||'📁'}</span>
+                <span style="flex:1;">${escapeHtml(p.name)}</span>
+                <span style="font-size:11px; color:#aaa;">${dayTasks.filter(t=>t.done).length}/${dayTasks.length}</span>
+            </div>`;
+            dayTasks.forEach(t => {
+                rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="padding-left:22px;">
+                    <span>${t.done ? '✅' : '⬜'}</span>
+                    <span style="flex:1; font-size:13px; ${t.done?'color:#aaa;':''}">${escapeHtml(t.name)}</span>
+                </div>`;
+            });
+        });
+        if (!rows) rows = '<div class="empty">이 날의 기록이 없어요</div>';
+        listEl.innerHTML = rows;
+        openOverlay('dateDetailOverlay');
+    }
+    function goToCheckDate(dateStr) {
+        closeOverlay('dateDetailOverlay');
+        closeOverlay('briefingOverlay');
+        checkDateStr = dateStr;
+        switchTab('check');
+    }
+
+    // ══════════ 오늘 브리핑 (회고 + 이월) ══════════
+    function getYesterdayStr() { return addDaysStr(getTodayStr(), -1); }
+
+    // 특정 날짜의 모든 항목 (루틴 + 할 일) + 완료 여부
+    function collectDayItems(dateStr) {
+        const items = [];
+        routines.forEach(r => items.push({ name: r.name, done: (r.checkHistory || []).includes(dateStr) }));
+        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done }); });
+        projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done }); }));
+        return items;
+    }
+    function countDone(items) { return items.filter(i => i.done).length; }
+    // 어제 미완료 중 오늘로 이월 가능한 할 일 (루틴 제외)
+    function collectCarry() {
+        const y = getYesterdayStr(), today = getTodayStr();
+        const list = [];
+        standaloneTasks.forEach(t => { if (!t.done && t.date === y) list.push({ kind: 's', taskId: t.id, name: t.name }); });
+        projects.forEach(p => { if (projectActiveOn(p, today)) (p.tasks || []).forEach(t => { if (!t.done && t.date === y) list.push({ kind: 'p', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }); }); });
+        return list;
+    }
+
+    // 특정 날짜의 할 일만 (루틴 제외) + 완료 여부
+    function collectDayTasks(dateStr) {
+        const items = [];
+        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done }); });
+        projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done }); }));
+        return items;
+    }
+    function briefRows(items, dateStr) {
+        return items.map(d => `<div class="brief-row" onclick="goToCheckDate('${dateStr}')"><span>${d.done ? '✅' : '⬜'}</span><span style="flex:1; ${d.done ? 'color:#aaa; text-decoration:line-through;' : ''}">${escapeHtml(d.name)}</span></div>`).join('');
+    }
+    function openBriefing() { renderBriefing(); openOverlay('briefingOverlay'); }
+    function renderBriefing() {
+        const y = getYesterdayStr(), today = getTodayStr();
+        document.getElementById('briefingTitle').textContent = `오늘 브리핑 · ${krLabel(today)}`;
+        const yTasks = collectDayTasks(y);
+        const tTasks = collectDayTasks(today);
+        const carry = collectCarry();
+        let html = '';
+
+        // 💚 루틴 (어제·오늘 상태 나란히)
+        if (routines.length) {
+            html += '<div class="brief-sec-title">💚 루틴</div>';
+            html += routines.map(r => {
+                const yD = (r.checkHistory || []).includes(y);
+                const tD = (r.checkHistory || []).includes(today);
+                return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">${escapeHtml(r.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">어제 ${yD ? '✅' : '⬜'} · 오늘 ${tD ? '✅' : '⬜'}</span></div>`;
+            }).join('');
+        }
+
+        // 📅 어제 한 일 (할 일만)
+        html += `<div class="brief-sec-title">📅 어제 한 일 <span style="color:#aaa; font-weight:normal;">(${countDone(yTasks)}/${yTasks.length})</span></div>`;
+        html += yTasks.length ? briefRows(yTasks, y) : '<div class="brief-empty">어제 할 일이 없어요</div>';
+        if (carry.length) {
+            html += `<div class="brief-carry"><span>⏭️ 어제 못 끝낸 할 일 ${carry.length}개</span><button onclick="carryOverYesterday()">오늘로 가져오기</button></div>`;
+        }
+
+        // 📝 오늘 할 일 (할 일만)
+        html += `<div class="brief-sec-title">📝 오늘 할 일 <span style="color:#aaa; font-weight:normal;">(${countDone(tTasks)}/${tTasks.length})</span></div>`;
+        html += tTasks.length ? briefRows(tTasks, today) : '<div class="brief-empty">오늘 할 일이 없어요</div>';
+
+        document.getElementById('briefingBody').innerHTML = html;
+    }
+    function carryOverYesterday() {
+        const list = collectCarry();
+        if (list.length === 0) { showToast('이월할 할 일이 없어요'); return; }
+        const today = getTodayStr();
+        list.forEach(it => {
+            if (it.kind === 's') { const t = standaloneTasks.find(x => x.id === it.taskId); if (t) t.date = today; }
+            else { const p = projects.find(x => x.id === it.projectId); const t = p && (p.tasks || []).find(x => x.id === it.taskId); if (t) t.date = today; }
+        });
+        syncAll();
+        renderBriefing();
+        showToast(`⏭️ ${list.length}개를 오늘로 가져왔어요`);
+    }
+    function buildBriefingText() {
+        const y = getYesterdayStr(), today = getTodayStr();
+        const yTasks = collectDayTasks(y);
+        const tTasks = collectDayTasks(today);
+        const line = d => `- ${d.done ? '✅' : '⬜'} ${d.name}`;
+        let s = `📋 다했텅 브리핑 (${krLabel(today)})\n`;
+        if (routines.length) {
+            s += `\n💚 루틴\n`;
+            s += routines.map(r => `- ${r.name} (어제 ${(r.checkHistory || []).includes(y) ? '✅' : '⬜'} · 오늘 ${(r.checkHistory || []).includes(today) ? '✅' : '⬜'})`).join('\n');
+        }
+        s += `\n\n📅 어제 한 일 (${countDone(yTasks)}/${yTasks.length})\n`;
+        s += yTasks.length ? yTasks.map(line).join('\n') : '- (없음)';
+        s += `\n\n📝 오늘 할 일 (${countDone(tTasks)}/${tTasks.length})\n`;
+        s += tTasks.length ? tTasks.map(line).join('\n') : '- (없음)';
+        return s;
+    }
+    function copyBriefing() {
+        const text = buildBriefingText();
+        const ok = () => showToast('📋 복사됐어요! 슬랙에 붙여넣으세요');
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(ok).catch(() => fallbackCopy(text, ok));
+        } else { fallbackCopy(text, ok); }
+    }
+    function fallbackCopy(text, cb) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try { document.execCommand('copy'); cb(); } catch (e) { showToast('복사에 실패했어요'); }
+        document.body.removeChild(ta);
+    }
+
+    // ══════════ 체크 탭 ══════════
+    let checkDateStr = getTodayStr();
+    function changeCheckDate(dir) {
+        checkDateStr = addDaysStr(checkDateStr, dir);
+        renderCheckTab();
+    }
+    function isCheckable(dateStr) { return dateStr <= getTodayStr(); }
+
+    function taskRow(projLabel, projId, t) {
+        const pid = projId === null ? 'null' : projId;
+        return `<div class="check-item" style="padding-left:${projId===null?'6':'18'}px;">
+            <div class="check-box ${t.done?'done':''}" onclick="toggleTask(${pid},${t.id})">${t.done?'✓':''}</div>
+            <span class="check-name ${t.done?'done':''}">${escapeHtml(t.name)}</span>
+            <button class="icon-btn" onclick="editTask(${pid},${t.id})">수정</button>
+            <button class="icon-btn" onclick="openMemo('task',${pid},${t.id})">📝${(t.memos&&t.memos.length)?t.memos.length:''}</button>
+            <button class="icon-btn del" onclick="deleteTask(${pid},${t.id})">×</button>
+        </div>` + renderTaskMemos(projId, t);
+    }
+    function renderTaskMemos(projId, t) {
+        if (!t.memos || t.memos.length === 0) return '';
+        const pid = projId === null ? 'null' : projId;
+        return '<div style="padding-left:' + (projId===null?'34':'46') + 'px;">' + t.memos.map((m, idx) => `
+            <div class="memo-chip">
+                <span>📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
+                <span style="color:var(--danger); cursor:pointer;" onclick="deleteTaskMemo(${pid},${t.id},${idx})">×</span>
+            </div>`).join('') + '</div>';
+    }
+
+    function renderCheckTab() {
+        const isToday = checkDateStr === getTodayStr();
+        const isFuture = checkDateStr > getTodayStr();
+        document.getElementById('checkDateLabel').textContent = isToday ? `오늘 · ${krLabel(checkDateStr)}` : (isFuture ? `예정 · ${krLabel(checkDateStr)}` : krLabel(checkDateStr));
+        document.getElementById('checkDateNext').style.visibility = 'visible';
+        document.getElementById('routineChecklistTitle').textContent = isToday ? '오늘의 루틴' : '이 날의 루틴';
+        const editable = isCheckable(checkDateStr);
+
+        // 루틴 체크리스트
+        const rEl = document.getElementById('routineChecklist');
+        if (routines.length === 0) {
+            rEl.innerHTML = '<div class="empty">관리 탭에서 루틴을 추가해 보세요</div>';
+        } else {
+            rEl.innerHTML = routines.map(r => {
+                const done = (r.checkHistory || []).includes(checkDateStr);
+                return `<div class="check-item">
+                    <div class="check-box ${done?'done':''}" onclick="toggleRoutine(${r.id})">${done?'✓':''}</div>
+                    <span class="check-emoji">${r.emoji||'💚'}</span>
+                    <span class="check-name ${done?'done':''}">${escapeHtml(r.name)}</span>
+                </div>`;
+            }).join('');
+        }
+
+        // 이 날 할 일 (프로젝트 영역 → 단독 영역, 시각적으로 구분)
+        const tEl = document.getElementById('dayTaskList');
+        let html = '';
+        const activeProjects = projects.filter(p => projectActiveOn(p, checkDateStr));
+        const dayStandalone = standaloneTasks.filter(t => t.date === checkDateStr);
+
+        // 프로젝트 영역
+        if (activeProjects.length > 0) {
+            html += '<div class="task-group"><div class="task-group-title">📁 프로젝트 할 일</div>';
+            activeProjects.forEach(p => {
+                const dayTasks = (p.tasks || []).filter(t => t.date === checkDateStr);
+                html += '<div class="proj-block">';
+                html += `<div class="proj-header"><span class="proj-color-dot" style="background:${p.color};"></span><span class="check-emoji">${p.emoji||'📁'}</span>${escapeHtml(p.name)}</div>`;
+                html += `<button class="mini-add" style="margin-top:6px; margin-bottom:6px;" onclick="openTaskModal(${p.id})">+ 할 일 추가</button>`;
+                dayTasks.forEach(t => { html += taskRow(p.name, p.id, t); });
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        // 단독 영역
+        html += '<div class="task-group"><div class="task-group-title">📝 단독 할 일</div>';
+        html += '<div class="standalone-block">';
+        html += '<button class="mini-add" style="margin-top:4px; margin-bottom:6px;" onclick="openTaskModal(null)">+ 단독 할 일 추가</button>';
+        if (dayStandalone.length > 0) {
+            dayStandalone.forEach(t => { html += taskRow(null, null, t); });
+        } else {
+            html += '<div class="empty" style="padding:10px 0;">단독 할 일이 없어요</div>';
+        }
+        html += '</div></div>';
+
+        tEl.innerHTML = html;
+
+        if (!editable) {
+            document.querySelectorAll('#routineChecklist .check-box, #dayTaskList .check-box').forEach(b => b.style.opacity = '0.4');
+        }
+    }
+
+    // ══════════ 루틴 CRUD ══════════
+    function addRoutine() {
+        const emoji = document.getElementById('newRoutineEmoji').value.trim() || '💚';
+        const name = document.getElementById('newRoutineName').value.trim();
+        if (!name) { showToast('루틴 이름을 입력해 주세요'); return; }
+        routines.push({ id: Date.now(), name, emoji, memos: [], checkHistory: [] });
+        document.getElementById('newRoutineEmoji').value = '';
+        document.getElementById('newRoutineName').value = '';
+        syncAll();
+        showToast(`${emoji} [${name}] 루틴이 추가됐어요`);
+    }
+    function toggleRoutine(id) {
+        if (!isCheckable(checkDateStr)) { showToast('미래 날짜는 체크할 수 없어요'); return; }
+        const r = routines.find(x => x.id === id); if (!r) return;
+        r.checkHistory = r.checkHistory || [];
+        const i = r.checkHistory.indexOf(checkDateStr);
+        if (i >= 0) r.checkHistory.splice(i, 1); else r.checkHistory.push(checkDateStr);
+        syncAll();
+    }
+    let editingRoutineId = null;
+    function editRoutine(id) {
+        const r = routines.find(x => x.id === id); if (!r) return;
+        editingRoutineId = id;
+        document.getElementById('editRoutineEmoji').value = r.emoji;
+        document.getElementById('editRoutineName').value = r.name;
+        openOverlay('routineEditOverlay');
+    }
+    function saveEditRoutine() {
+        const r = routines.find(x => x.id === editingRoutineId); if (!r) return;
+        const name = document.getElementById('editRoutineName').value.trim();
+        if (!name) { showToast('루틴 이름을 입력해 주세요'); return; }
+        r.emoji = document.getElementById('editRoutineEmoji').value.trim() || '💚';
+        r.name = name;
+        closeOverlay('routineEditOverlay');
+        syncAll();
+        showToast('✅ 루틴이 수정됐어요');
+    }
+    function deleteRoutine(id) {
+        const r = routines.find(x => x.id === id); if (!r) return;
+        askConfirm(`[${r.name}] 루틴을 삭제할까요?`, () => {
+            routines = routines.filter(x => x.id !== id);
+            syncAll();
+            showToast('🗑️ 루틴이 삭제됐어요');
+        });
+    }
+    function renderRoutineMng() {
+        const el = document.getElementById('routineMngList');
+        if (routines.length === 0) { el.innerHTML = '<div class="empty">등록된 루틴이 없어요</div>'; return; }
+        el.innerHTML = routines.map(r => `
+            <div class="mng-item">
+                <div class="mng-info">
+                    <div class="mng-name"><span class="check-emoji">${r.emoji||'💚'}</span> ${escapeHtml(r.name)}</div>
+                    <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료</div>
+                    ${renderMemos('routine', r.id, r.memos)}
+                </div>
+                <div class="mng-actions">
+                    <button class="icon-btn" onclick="editRoutine(${r.id})">수정</button>
+                    <button class="icon-btn del" onclick="deleteRoutine(${r.id})">삭제</button>
+                </div>
+            </div>`).join('');
+    }
+
+    // ══════════ 프로젝트 CRUD ══════════
+    let editingProjectId = null, pickedColor = PROJECT_COLORS[0];
+    function renderColorPicker() {
+        document.getElementById('projColorPicker').innerHTML = PROJECT_COLORS.map(c =>
+            `<div class="color-swatch ${c===pickedColor?'sel':''}" style="background:${c};" onclick="pickColor('${c}')"></div>`).join('');
+    }
+    function pickColor(c) { pickedColor = c; renderColorPicker(); }
+    function openProjectModal() {
+        editingProjectId = null; pickedColor = PROJECT_COLORS[0];
+        document.getElementById('projectModalTitle').textContent = '새 프로젝트 / 일정';
+        document.getElementById('projEmoji').value = '';
+        document.getElementById('projName').value = '';
+        document.getElementById('projStart').value = getTodayStr();
+        document.getElementById('projEnd').value = getTodayStr();
+        renderColorPicker();
+        openOverlay('projectOverlay');
+    }
+    function editProject(id) {
+        const p = projects.find(x => x.id === id); if (!p) return;
+        editingProjectId = id; pickedColor = p.color;
+        document.getElementById('projectModalTitle').textContent = '프로젝트 / 일정 수정';
+        document.getElementById('projEmoji').value = p.emoji;
+        document.getElementById('projName').value = p.name;
+        document.getElementById('projStart').value = p.startDate;
+        document.getElementById('projEnd').value = p.endDate;
+        renderColorPicker();
+        openOverlay('projectOverlay');
+    }
+    function saveProject() {
+        const name = document.getElementById('projName').value.trim();
+        const emoji = document.getElementById('projEmoji').value.trim() || '📁';
+        let start = document.getElementById('projStart').value;
+        let end = document.getElementById('projEnd').value;
+        if (!name) { showToast('이름을 입력해 주세요'); return; }
+        if (!start || !end) { showToast('기간을 선택해 주세요'); return; }
+        if (start > end) { const t = start; start = end; end = t; }
+        if (editingProjectId) {
+            const p = projects.find(x => x.id === editingProjectId);
+            Object.assign(p, { name, emoji, color: pickedColor, startDate: start, endDate: end });
+        } else {
+            projects.push({ id: Date.now(), name, emoji, color: pickedColor, startDate: start, endDate: end, memos: [], tasks: [] });
+        }
+        closeOverlay('projectOverlay');
+        syncAll();
+        showToast('✅ 저장됐어요');
+    }
+    function deleteProject(id) {
+        const p = projects.find(x => x.id === id); if (!p) return;
+        askConfirm(`[${p.name}]와(과) 그 안의 모든 할 일을 삭제할까요?`, () => {
+            projects = projects.filter(x => x.id !== id);
+            syncAll();
+            showToast('🗑️ 삭제됐어요');
+        });
+    }
+    function renderProjectMng() {
+        const el = document.getElementById('projectMngList');
+        if (projects.length === 0) { el.innerHTML = '<div class="empty">등록된 프로젝트가 없어요</div>'; return; }
+        el.innerHTML = projects.slice().sort((a,b) => a.startDate.localeCompare(b.startDate)).map(p => {
+            const pg = projectProgress(p);
+            const single = p.startDate === p.endDate;
+            return `
+            <div class="mng-item">
+                <div class="mng-info">
+                    <div class="mng-name"><span class="proj-color-dot" style="background:${p.color};"></span> <span class="check-emoji">${p.emoji||'📁'}</span> ${escapeHtml(p.name)}</div>
+                    <div class="mng-sub">${single ? krLabel(p.startDate) : `${p.startDate} ~ ${p.endDate}`} · 할 일 ${pg.done}/${pg.total} 완료</div>
+                    ${renderMemos('project', p.id, p.memos)}
+                </div>
+                <div class="mng-actions">
+                    <button class="icon-btn" onclick="editProject(${p.id})">수정</button>
+                    <button class="icon-btn del" onclick="deleteProject(${p.id})">삭제</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // ══════════ 태스크(할 일) ══════════
+    // projectId === null 이면 단독 할 일
+    let taskProjectId = null;
+    let editingTask = null; // { projectId, taskId } 또는 null(추가 모드)
+    function getTaskList(projectId) {
+        if (projectId === null || projectId === 'null') return standaloneTasks;
+        const p = projects.find(x => x.id === projectId);
+        if (!p) return null;
+        p.tasks = p.tasks || [];
+        return p.tasks;
+    }
+    function openTaskModal(projectId) {
+        taskProjectId = projectId; // null = 단독
+        editingTask = null;
+        const p = (projectId === null) ? null : projects.find(x => x.id === projectId);
+        document.getElementById('taskModalTitle').textContent = p ? `${p.name} · 할 일 추가` : '단독 할 일 추가';
+        document.getElementById('taskName').value = '';
+        document.getElementById('taskDate').value = checkDateStr;
+        document.getElementById('taskDateGroup').style.display = 'block';
+        openOverlay('taskOverlay');
+    }
+    function editTask(projectId, taskId) {
+        const t = findTask(projectId, taskId); if (!t) return;
+        editingTask = { projectId, taskId };
+        document.getElementById('taskModalTitle').textContent = '할 일 수정';
+        document.getElementById('taskName').value = t.name;
+        document.getElementById('taskDateGroup').style.display = 'none';
+        openOverlay('taskOverlay');
+    }
+    function saveTask() {
+        const name = document.getElementById('taskName').value.trim();
+        if (!name) { showToast('할 일 내용을 입력해 주세요'); return; }
+        if (editingTask) {
+            const t = findTask(editingTask.projectId, editingTask.taskId); if (!t) return;
+            t.name = name;
+            editingTask = null;
+            closeOverlay('taskOverlay');
+            syncAll();
+            showToast('✅ 할 일이 수정됐어요');
+            return;
+        }
+        const list = getTaskList(taskProjectId); if (!list) return;
+        const date = document.getElementById('taskDate').value;
+        if (!date) { showToast('날짜를 선택해 주세요'); return; }
+        list.push({ id: Date.now(), date, name, done: false, memos: [] });
+        closeOverlay('taskOverlay');
+        syncAll();
+        showToast('✅ 할 일이 추가됐어요');
+    }
+    function toggleTask(projectId, taskId) {
+        const list = getTaskList(projectId); if (!list) return;
+        const t = list.find(x => x.id === taskId); if (!t) return;
+        if (!isCheckable(t.date)) { showToast('미래 날짜는 체크할 수 없어요'); return; }
+        t.done = !t.done;
+        syncAll();
+    }
+    function deleteTask(projectId, taskId) {
+        if (projectId === null || projectId === 'null') {
+            standaloneTasks = standaloneTasks.filter(x => x.id !== taskId);
+        } else {
+            const p = projects.find(x => x.id === projectId); if (!p) return;
+            p.tasks = (p.tasks || []).filter(x => x.id !== taskId);
+        }
+        syncAll();
+    }
+    function findTask(projectId, taskId) {
+        const list = getTaskList(projectId); if (!list) return null;
+        return list.find(x => x.id === taskId) || null;
+    }
+    function deleteTaskMemo(projectId, taskId, idx) {
+        const t = findTask(projectId, taskId);
+        if (t && t.memos) t.memos.splice(idx, 1);
+        syncAll();
+    }
+
+    // ══════════ 메모 (루틴/프로젝트 공통) ══════════
+    let memoTarget = null; // { kind, id, taskId? }
+    function renderMemos(kind, id, memos) {
+        let html = (memos || []).map((m, idx) => `
+            <div class="memo-chip">
+                <span>📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
+                <span style="color:var(--danger); cursor:pointer;" onclick="deleteMemo('${kind}',${id},${idx})">×</span>
+            </div>`).join('');
+        html += `<button class="memo-add" onclick="openMemo('${kind}',${id})">+ 메모</button>`;
+        return html;
+    }
+    function openMemo(kind, id, taskId) {
+        memoTarget = { kind, id, taskId };
+        document.getElementById('memoDate').value = (kind === 'task') ? '' : getTodayStr();
+        document.getElementById('memoText').value = '';
+        openOverlay('memoOverlay');
+    }
+    function getMemoHolder() {
+        if (!memoTarget) return null;
+        if (memoTarget.kind === 'routine') return routines.find(x => x.id === memoTarget.id);
+        if (memoTarget.kind === 'project') return projects.find(x => x.id === memoTarget.id);
+        if (memoTarget.kind === 'task') return findTask(memoTarget.id, memoTarget.taskId);
+        return null;
+    }
+    function saveMemo() {
+        const holder = getMemoHolder(); if (!holder) return;
+        const text = document.getElementById('memoText').value.trim();
+        if (!text) { showToast('메모 내용을 입력해 주세요'); return; }
+        holder.memos = holder.memos || [];
+        holder.memos.push({ date: document.getElementById('memoDate').value || '', text });
+        closeOverlay('memoOverlay');
+        syncAll();
+        showToast('📝 메모가 추가됐어요');
+    }
+    function deleteMemo(kind, id, idx) {
+        const holder = kind === 'routine' ? routines.find(x => x.id === id) : projects.find(x => x.id === id);
+        if (holder && holder.memos) holder.memos.splice(idx, 1);
+        syncAll();
+    }
+
+    // ══════════ 백업 / 복원 ══════════
+    function exportBackup() {
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `다했텅_백업_${getTodayStr()}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('💾 백업 파일을 내려받았어요');
+    }
+    function importBackup(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                if (!parsed || !Array.isArray(parsed.routines) || !Array.isArray(parsed.projects)) {
+                    showToast('⚠️ 백업 파일 형식이 올바르지 않아요'); return;
+                }
+                routines = parsed.routines;
+                projects = parsed.projects;
+                standaloneTasks = Array.isArray(parsed.standaloneTasks) ? parsed.standaloneTasks : [];
+                syncAll();
+                showToast('✅ 백업 데이터를 불러왔어요');
+            } catch (err) {
+                console.error(err);
+                showToast('⚠️ 파일을 읽는 중 문제가 생겼어요');
+            } finally {
+                document.getElementById('backupFileInput').value = '';
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // ══════════ 공통 UI ══════════
+    function openOverlay(id) { document.getElementById(id).classList.add('active'); }
+    function closeOverlay(id) { document.getElementById(id).classList.remove('active'); }
+    let confirmCallback = null;
+    function askConfirm(text, cb) {
+        document.getElementById('confirmText').textContent = text;
+        confirmCallback = cb;
+        openOverlay('confirmOverlay');
+    }
+    document.getElementById('confirmYesBtn').onclick = () => {
+        closeOverlay('confirmOverlay');
+        if (confirmCallback) confirmCallback();
+        confirmCallback = null;
+    };
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.innerHTML = msg; t.style.display = 'block';
+        clearTimeout(window._toastTimer);
+        window._toastTimer = setTimeout(() => t.style.display = 'none', 2200);
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    // ══════════ 초기화 ══════════
+    window.onload = () => {
+        renderHome();
+        renderCheckTab();
+        renderRoutineMng();
+        renderProjectMng();
+        updateLastSavedLabel();
+    };
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW 등록 실패', err));
+        });
+    }
+</script>
+</body>
+</html>
