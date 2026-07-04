@@ -243,6 +243,17 @@
             <button class="btn btn-primary btn-sm" onclick="addCycleRoutine()">순환 루틴 추가</button>
             <div id="cycleMngList" style="margin-top:10px;"></div>
         </div>
+
+        <div class="card">
+            <div class="section-title">📅 요일 루틴</div>
+            <p style="font-size:11px; color:#999; margin:0 0 8px; line-height:1.5;">요일마다 다른 항목이 떠요. (예: 화=상체, 수=러닝)</p>
+            <div class="form-row">
+                <input type="text" id="newWeekdayEmoji" placeholder="💪" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
+                <input type="text" id="newWeekdayName" placeholder="요일 루틴 이름 (예: 운동)" style="flex:1;">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="addWeekdayRoutine()">요일 루틴 추가</button>
+            <div id="weekdayMngList" style="margin-top:10px;"></div>
+        </div>
     </div>
 
     <!-- 설정 -->
@@ -396,7 +407,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -417,6 +428,7 @@
     let projects = (saved && Array.isArray(saved.projects)) ? saved.projects : [];
     let standaloneTasks = (saved && Array.isArray(saved.standaloneTasks)) ? saved.standaloneTasks : [];
     let cycleRoutines = (saved && Array.isArray(saved.cycleRoutines)) ? saved.cycleRoutines : [];
+    let weekdayRoutines = (saved && Array.isArray(saved.weekdayRoutines)) ? saved.weekdayRoutines : [];
 
     // ══════════ 완료 판정 · 스트릭 ══════════
     function isRoutineDayDone(dateStr) {
@@ -456,6 +468,7 @@
         renderCheckTab();
         renderRoutineMng();
         renderCycleMng();
+        renderWeekdayMng();
         renderProjectMng();
         if (document.getElementById('tab-home').classList.contains('active')) renderHome();
     }
@@ -470,7 +483,7 @@
         document.getElementById('tab-' + name).scrollTop = 0;
         if (name === 'home') renderHome();
         if (name === 'check') renderCheckTab();
-        if (name === 'manage') { renderRoutineMng(); renderCycleMng(); renderProjectMng(); }
+        if (name === 'manage') { renderRoutineMng(); renderCycleMng(); renderWeekdayMng(); renderProjectMng(); }
         if (name === 'settings') updateLastSavedLabel();
     }
 
@@ -569,6 +582,15 @@
                 </div>`;
             }
         });
+        weekdayRoutines.forEach(wr => {
+            const item = weekdayItemOn(wr, dateStr);
+            if (!item) return;
+            const done = (wr.checkHistory || []).includes(dateStr);
+            rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')">
+                <span>${done ? '✅' : '⬜'}</span><span class="check-emoji">${wr.emoji||'📅'}</span>
+                <span style="flex:1; ${done?'color:#aaa;':''}">${escapeHtml(wr.name)}: ${escapeHtml(item)}</span>
+            </div>`;
+        });
         const dayStandalone = standaloneTasks.filter(t => t.date === dateStr);
         projects.filter(p => projectActiveOn(p, dateStr)).forEach(p => {
             const dayTasks = (p.tasks || []).filter(t => t.date === dateStr);
@@ -619,8 +641,14 @@
         const h = (cr.history || []).find(x => x.date === dateStr);
         return h ? h.item : null;
     }
+    // 요일 루틴: 그날 요일에 지정된 항목
+    function weekdayItemOn(wr, dateStr) {
+        const dow = new Date(parseDate(dateStr)).getDay(); // 0=일~6=토
+        const item = wr.byDay ? (wr.byDay[dow] || '') : '';
+        return item.trim() ? item.trim() : null;
+    }
 
-    // 특정 날짜의 모든 항목 (루틴 + 순환 루틴 + 할 일) + 완료 여부
+    // 특정 날짜의 모든 항목 (루틴 + 순환 + 요일 + 할 일) + 완료 여부
     function collectDayItems(dateStr) {
         const items = [];
         routines.forEach(r => items.push({ name: r.name, done: (r.checkHistory || []).includes(dateStr) }));
@@ -631,6 +659,10 @@
                 const c = cycleTodayItem(cr);
                 if (c) items.push({ name: `${cr.name}: ${c.item}`, done: false });
             }
+        });
+        weekdayRoutines.forEach(wr => {
+            const item = weekdayItemOn(wr, dateStr);
+            if (item) items.push({ name: `${wr.name}: ${item}`, done: (wr.checkHistory || []).includes(dateStr) });
         });
         standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done }); });
         projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done }); }));
@@ -666,7 +698,7 @@
         let html = '';
 
         // 💚 루틴 (어제·오늘 상태 나란히)
-        if (routines.length || cycleRoutines.length) {
+        if (routines.length || cycleRoutines.length || weekdayRoutines.length) {
             html += '<div class="brief-sec-title">💚 루틴</div>';
             html += routines.map(r => {
                 const yD = (r.checkHistory || []).includes(y);
@@ -678,6 +710,12 @@
                 const tRec = cycleDoneOn(cr, today);
                 const todayLabel = tRec ? `✅ ${escapeHtml(tRec)}` : (cycleTodayItem(cr) ? `⬜ ${escapeHtml(cycleTodayItem(cr).item)}` : '—');
                 return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">🔁 ${escapeHtml(cr.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">${yRec ? '어제 '+escapeHtml(yRec)+' · ' : ''}오늘 ${todayLabel}</span></div>`;
+            }).join('');
+            html += weekdayRoutines.map(wr => {
+                const item = weekdayItemOn(wr, today);
+                if (!item) return '';
+                const tD = (wr.checkHistory || []).includes(today);
+                return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">📅 ${escapeHtml(wr.name)}: ${escapeHtml(item)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">오늘 ${tD ? '✅' : '⬜'}</span></div>`;
             }).join('');
         }
 
@@ -803,6 +841,17 @@
                 </div>`;
             }
             // 과거·미래 기록 없음 → 표시 안 함
+        });
+
+        weekdayRoutines.forEach(wr => {
+            const item = weekdayItemOn(wr, checkDateStr);
+            if (!item) return; // 그날 요일에 지정 없음 → 안 뜸
+            const done = (wr.checkHistory || []).includes(checkDateStr);
+            rHtml += `<div class="check-item">
+                <div class="check-box ${done?'done':''}" onclick="toggleWeekday(${wr.id})">${done?'✓':''}</div>
+                <span class="check-emoji">${wr.emoji||'📅'}</span>
+                <span class="check-name ${done?'done':''}">${escapeHtml(wr.name)}: <b>${escapeHtml(item)}</b></span>
+            </div>`;
         });
 
         if (!rHtml) rHtml = '<div class="empty">관리 탭에서 루틴을 추가해 보세요</div>';
@@ -997,6 +1046,64 @@
         }).join('');
     }
 
+    // ══════════ 요일 루틴 CRUD ══════════
+    const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+    function addWeekdayRoutine() {
+        const emoji = document.getElementById('newWeekdayEmoji').value.trim() || '📅';
+        const name = document.getElementById('newWeekdayName').value.trim();
+        if (!name) { showToast('요일 루틴 이름을 입력해 주세요'); return; }
+        weekdayRoutines.push({ id: Date.now(), name, emoji, byDay: {}, memos: [], checkHistory: [] });
+        document.getElementById('newWeekdayEmoji').value = '';
+        document.getElementById('newWeekdayName').value = '';
+        syncAll();
+        showToast(`${emoji} [${name}] 요일 루틴이 추가됐어요. 아래에서 요일별 항목을 채우세요`);
+    }
+    function deleteWeekdayRoutine(id) {
+        const wr = weekdayRoutines.find(x => x.id === id); if (!wr) return;
+        askConfirm(`[${wr.name}] 요일 루틴을 삭제할까요?`, () => {
+            weekdayRoutines = weekdayRoutines.filter(x => x.id !== id);
+            syncAll();
+            showToast('🗑️ 요일 루틴이 삭제됐어요');
+        });
+    }
+    function setWeekdayItem(id, dow, value) {
+        const wr = weekdayRoutines.find(x => x.id === id); if (!wr) return;
+        wr.byDay = wr.byDay || {};
+        wr.byDay[dow] = value;
+        saveToStorage(); // 입력 중 리렌더 방지: 저장만
+    }
+    function renderWeekdayMng() {
+        const el = document.getElementById('weekdayMngList');
+        if (weekdayRoutines.length === 0) { el.innerHTML = '<div class="empty">등록된 요일 루틴이 없어요</div>'; return; }
+        el.innerHTML = weekdayRoutines.map(wr => {
+            const rows = [0,1,2,3,4,5,6].map(d => `
+                <div style="display:flex; align-items:center; gap:8px; padding:3px 0;">
+                    <span style="width:20px; text-align:center; font-weight:bold; color:${d===0?'#E64980':d===6?'#4C6EF5':'#555'};">${DOW_LABELS[d]}</span>
+                    <input type="text" value="${escapeHtml((wr.byDay && wr.byDay[d]) || '')}" placeholder="쉬는 날" onchange="setWeekdayItem(${wr.id},${d},this.value)" style="flex:1; padding:6px 8px; font-size:13px;">
+                </div>`).join('');
+            return `
+            <div class="mng-item" style="flex-direction:column; align-items:stretch; gap:4px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="mng-name"><span class="check-emoji">${wr.emoji||'📅'}</span> ${escapeHtml(wr.name)}</div>
+                    <div class="mng-actions">
+                        <button class="icon-btn del" onclick="deleteWeekdayRoutine(${wr.id})">삭제</button>
+                    </div>
+                </div>
+                <div style="margin-top:2px;">${rows}</div>
+                ${renderMemos('weekday', wr.id, wr.memos)}
+            </div>`;
+        }).join('');
+    }
+    // 체크 탭: 요일 루틴 완료 토글 (오늘까지만)
+    function toggleWeekday(id) {
+        const wr = weekdayRoutines.find(x => x.id === id); if (!wr) return;
+        if (!isCheckable(checkDateStr)) { showToast('미래 날짜는 체크할 수 없어요'); return; }
+        wr.checkHistory = wr.checkHistory || [];
+        const i = wr.checkHistory.indexOf(checkDateStr);
+        if (i >= 0) wr.checkHistory.splice(i, 1); else wr.checkHistory.push(checkDateStr);
+        syncAll();
+    }
+
     // ══════════ 프로젝트 CRUD ══════════
     let editingProjectId = null, pickedColor = PROJECT_COLORS[0];
     function renderColorPicker() {
@@ -1172,6 +1279,7 @@
         if (!memoTarget) return null;
         if (memoTarget.kind === 'routine') return routines.find(x => x.id === memoTarget.id);
         if (memoTarget.kind === 'cycle') return cycleRoutines.find(x => x.id === memoTarget.id);
+        if (memoTarget.kind === 'weekday') return weekdayRoutines.find(x => x.id === memoTarget.id);
         if (memoTarget.kind === 'project') return projects.find(x => x.id === memoTarget.id);
         if (memoTarget.kind === 'task') return findTask(memoTarget.id, memoTarget.taskId);
         return null;
@@ -1189,6 +1297,7 @@
     function deleteMemo(kind, id, idx) {
         const holder = kind === 'routine' ? routines.find(x => x.id === id)
             : kind === 'cycle' ? cycleRoutines.find(x => x.id === id)
+            : kind === 'weekday' ? weekdayRoutines.find(x => x.id === id)
             : projects.find(x => x.id === id);
         if (holder && holder.memos) holder.memos.splice(idx, 1);
         syncAll();
@@ -1196,7 +1305,7 @@
 
     // ══════════ 백업 / 복원 ══════════
     function exportBackup() {
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines };
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1218,6 +1327,7 @@
                 projects = parsed.projects;
                 standaloneTasks = Array.isArray(parsed.standaloneTasks) ? parsed.standaloneTasks : [];
                 cycleRoutines = Array.isArray(parsed.cycleRoutines) ? parsed.cycleRoutines : [];
+                weekdayRoutines = Array.isArray(parsed.weekdayRoutines) ? parsed.weekdayRoutines : [];
                 syncAll();
                 showToast('✅ 백업 데이터를 불러왔어요');
             } catch (err) {
@@ -1258,6 +1368,7 @@
         renderCheckTab();
         renderRoutineMng();
         renderCycleMng();
+        renderWeekdayMng();
         renderProjectMng();
         updateLastSavedLabel();
     };
