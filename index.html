@@ -415,6 +415,18 @@
     function countRoutineDone(dateStr) {
         return routines.filter(r => (r.checkHistory || []).includes(dateStr)).length;
     }
+    // 그날 등록된 모든 일정(루틴+프로젝트 할 일+단독 할 일) 기준 완료 판정
+    function dayItemsStatus(dateStr) {
+        const items = collectDayItems(dateStr);
+        return { total: items.length, done: items.filter(i => i.done).length };
+    }
+    function dayAllClear(dateStr) {
+        const s = dayItemsStatus(dateStr);
+        return s.total > 0 && s.done === s.total;
+    }
+    function dayHasAnyDone(dateStr) {
+        return dayItemsStatus(dateStr).done > 0;
+    }
     function projectActiveOn(p, dateStr) {
         return p.startDate <= dateStr && dateStr <= p.endDate;
     }
@@ -489,8 +501,8 @@
             const isToday = dateStr === todayStr;
 
             let mark = '';
-            if (isRoutineDayAllClear(dateStr)) mark = '<img class="cal-char" src="char-allclear.png" alt="올클리어">';
-            else if (isRoutineDayDone(dateStr)) mark = '<div class="cal-dot"></div>';
+            if (dayAllClear(dateStr)) mark = '<img class="cal-char" src="char-allclear.png" alt="올클리어">';
+            else if (dayHasAnyDone(dateStr)) mark = '<div class="cal-dot"></div>';
 
             const hasStandalone = standaloneTasks.some(t => t.date === dateStr);
             const taskDot = hasStandalone ? '<div style="position:absolute; top:3px; right:4px; width:5px; height:5px; border-radius:50%; background:var(--accent);"></div>' : '';
