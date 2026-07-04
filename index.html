@@ -528,15 +528,6 @@
             </div>`;
         });
         const dayStandalone = standaloneTasks.filter(t => t.date === dateStr);
-        if (dayStandalone.length) {
-            rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📝</span><span style="flex:1;">이 날 할 일</span></div>`;
-            dayStandalone.forEach(t => {
-                rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="padding-left:22px;">
-                    <span>${t.done ? '✅' : '⬜'}</span>
-                    <span style="flex:1; font-size:13px; ${t.done?'color:#aaa;':''}">${escapeHtml(t.name)}</span>
-                </div>`;
-            });
-        }
         projects.filter(p => projectActiveOn(p, dateStr)).forEach(p => {
             const dayTasks = (p.tasks || []).filter(t => t.date === dateStr);
             rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="font-weight:bold;">
@@ -552,6 +543,15 @@
                 </div>`;
             });
         });
+        if (dayStandalone.length) {
+            rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📝</span><span style="flex:1;">이 날 할 일</span></div>`;
+            dayStandalone.forEach(t => {
+                rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="padding-left:22px;">
+                    <span>${t.done ? '✅' : '⬜'}</span>
+                    <span style="flex:1; font-size:13px; ${t.done?'color:#aaa;':''}">${escapeHtml(t.name)}</span>
+                </div>`;
+            });
+        }
         if (!rows) rows = '<div class="empty">이 날의 기록이 없어요</div>';
         listEl.innerHTML = rows;
         openOverlay('dateDetailOverlay');
