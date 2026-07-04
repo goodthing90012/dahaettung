@@ -951,13 +951,17 @@
         syncAll();
     }
     function deleteTask(projectId, taskId) {
-        if (projectId === null || projectId === 'null') {
-            standaloneTasks = standaloneTasks.filter(x => x.id !== taskId);
-        } else {
-            const p = projects.find(x => x.id === projectId); if (!p) return;
-            p.tasks = (p.tasks || []).filter(x => x.id !== taskId);
-        }
-        syncAll();
+        const t = findTask(projectId, taskId); if (!t) return;
+        askConfirm(`[${t.name}] 할 일을 삭제할까요?`, () => {
+            if (projectId === null || projectId === 'null') {
+                standaloneTasks = standaloneTasks.filter(x => x.id !== taskId);
+            } else {
+                const p = projects.find(x => x.id === projectId); if (!p) return;
+                p.tasks = (p.tasks || []).filter(x => x.id !== taskId);
+            }
+            syncAll();
+            showToast('🗑️ 할 일이 삭제됐어요');
+        });
     }
     function findTask(projectId, taskId) {
         const list = getTaskList(projectId); if (!list) return null;
