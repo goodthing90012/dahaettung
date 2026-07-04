@@ -118,6 +118,8 @@
         .memo-chip { font-size: 11px; color: #666; background: #F6F6F6; border-radius: 8px; padding: 4px 8px; margin-top: 4px; display: flex; justify-content: space-between; gap: 6px; }
         .memo-add { background: none; border: 1px dashed #ddd; color: #aaa; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; margin-top: 4px; }
         .color-picker { display: flex; gap: 8px; margin-top: 4px; }
+        .cycle-item { display: flex; align-items: center; gap: 4px; padding: 5px 4px; border-bottom: 1px solid #f4f4f4; font-size: 13px; }
+        .cycle-item.cur { background: var(--primary-tint); border-radius: 8px; }
         .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; }
         .color-swatch.sel { border-color: #333; }
 
@@ -229,6 +231,17 @@
             <div class="section-title">📁 프로젝트 · 일정</div>
             <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="openProjectModal()">+ 새 프로젝트 / 일정 추가</button>
             <div id="projectMngList" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="card">
+            <div class="section-title">🔁 순환 루틴</div>
+            <p style="font-size:11px; color:#999; margin:0 0 8px; line-height:1.5;">리스트를 하루에 하나씩 순서대로 순환해요. (예: 신발 돌려신기)</p>
+            <div class="form-row">
+                <input type="text" id="newCycleEmoji" placeholder="👟" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
+                <input type="text" id="newCycleName" placeholder="순환 루틴 이름 (예: 오늘의 신발)" style="flex:1;">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="addCycleRoutine()">순환 루틴 추가</button>
+            <div id="cycleMngList" style="margin-top:10px;"></div>
         </div>
     </div>
 
@@ -383,7 +396,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -403,6 +416,7 @@
     let routines = (saved && Array.isArray(saved.routines)) ? saved.routines : [];
     let projects = (saved && Array.isArray(saved.projects)) ? saved.projects : [];
     let standaloneTasks = (saved && Array.isArray(saved.standaloneTasks)) ? saved.standaloneTasks : [];
+    let cycleRoutines = (saved && Array.isArray(saved.cycleRoutines)) ? saved.cycleRoutines : [];
 
     // ══════════ 완료 판정 · 스트릭 ══════════
     function isRoutineDayDone(dateStr) {
@@ -441,6 +455,7 @@
         saveToStorage();
         renderCheckTab();
         renderRoutineMng();
+        renderCycleMng();
         renderProjectMng();
         if (document.getElementById('tab-home').classList.contains('active')) renderHome();
     }
@@ -455,7 +470,7 @@
         document.getElementById('tab-' + name).scrollTop = 0;
         if (name === 'home') renderHome();
         if (name === 'check') renderCheckTab();
-        if (name === 'manage') { renderRoutineMng(); renderProjectMng(); }
+        if (name === 'manage') { renderRoutineMng(); renderCycleMng(); renderProjectMng(); }
         if (name === 'settings') updateLastSavedLabel();
     }
 
@@ -539,6 +554,21 @@
                 <span style="flex:1; ${done?'color:#aaa;':''}">${escapeHtml(r.name)}</span>
             </div>`;
         });
+        cycleRoutines.forEach(cr => {
+            const rec = cycleDoneOn(cr, dateStr);
+            const isToday = dateStr === getTodayStr();
+            if (rec) {
+                rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')">
+                    <span>✅</span><span class="check-emoji">${cr.emoji||'🔁'}</span>
+                    <span style="flex:1; color:#aaa;">${escapeHtml(cr.name)}: ${escapeHtml(rec)}</span>
+                </div>`;
+            } else if (isToday && cycleTodayItem(cr)) {
+                rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')">
+                    <span>⬜</span><span class="check-emoji">${cr.emoji||'🔁'}</span>
+                    <span style="flex:1;">${escapeHtml(cr.name)}: ${escapeHtml(cycleTodayItem(cr).item)}</span>
+                </div>`;
+            }
+        });
         const dayStandalone = standaloneTasks.filter(t => t.date === dateStr);
         projects.filter(p => projectActiveOn(p, dateStr)).forEach(p => {
             const dayTasks = (p.tasks || []).filter(t => t.date === dateStr);
@@ -578,10 +608,30 @@
     // ══════════ 오늘 브리핑 (회고 + 이월) ══════════
     function getYesterdayStr() { return addDaysStr(getTodayStr(), -1); }
 
-    // 특정 날짜의 모든 항목 (루틴 + 할 일) + 완료 여부
+    // 순환 루틴 헬퍼
+    function cycleTodayItem(cr) {
+        if (!cr.items || cr.items.length === 0) return null;
+        const len = cr.items.length;
+        const idx = (((cr.currentIndex || 0) % len) + len) % len;
+        return { idx, item: cr.items[idx] };
+    }
+    function cycleDoneOn(cr, dateStr) {
+        const h = (cr.history || []).find(x => x.date === dateStr);
+        return h ? h.item : null;
+    }
+
+    // 특정 날짜의 모든 항목 (루틴 + 순환 루틴 + 할 일) + 완료 여부
     function collectDayItems(dateStr) {
         const items = [];
         routines.forEach(r => items.push({ name: r.name, done: (r.checkHistory || []).includes(dateStr) }));
+        cycleRoutines.forEach(cr => {
+            const rec = cycleDoneOn(cr, dateStr);
+            if (rec) items.push({ name: `${cr.name}: ${rec}`, done: true });
+            else if (dateStr === getTodayStr()) {
+                const c = cycleTodayItem(cr);
+                if (c) items.push({ name: `${cr.name}: ${c.item}`, done: false });
+            }
+        });
         standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done }); });
         projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done }); }));
         return items;
@@ -616,12 +666,18 @@
         let html = '';
 
         // 💚 루틴 (어제·오늘 상태 나란히)
-        if (routines.length) {
+        if (routines.length || cycleRoutines.length) {
             html += '<div class="brief-sec-title">💚 루틴</div>';
             html += routines.map(r => {
                 const yD = (r.checkHistory || []).includes(y);
                 const tD = (r.checkHistory || []).includes(today);
                 return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">${escapeHtml(r.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">어제 ${yD ? '✅' : '⬜'} · 오늘 ${tD ? '✅' : '⬜'}</span></div>`;
+            }).join('');
+            html += cycleRoutines.map(cr => {
+                const yRec = cycleDoneOn(cr, y);
+                const tRec = cycleDoneOn(cr, today);
+                const todayLabel = tRec ? `✅ ${escapeHtml(tRec)}` : (cycleTodayItem(cr) ? `⬜ ${escapeHtml(cycleTodayItem(cr).item)}` : '—');
+                return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">🔁 ${escapeHtml(cr.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">${yRec ? '어제 '+escapeHtml(yRec)+' · ' : ''}오늘 ${todayLabel}</span></div>`;
             }).join('');
         }
 
@@ -717,20 +773,40 @@
         document.getElementById('routineChecklistTitle').textContent = isToday ? '오늘의 루틴' : '이 날의 루틴';
         const editable = isCheckable(checkDateStr);
 
-        // 루틴 체크리스트
+        // 루틴 체크리스트 (일반 루틴 + 순환 루틴)
         const rEl = document.getElementById('routineChecklist');
-        if (routines.length === 0) {
-            rEl.innerHTML = '<div class="empty">관리 탭에서 루틴을 추가해 보세요</div>';
-        } else {
-            rEl.innerHTML = routines.map(r => {
-                const done = (r.checkHistory || []).includes(checkDateStr);
-                return `<div class="check-item">
-                    <div class="check-box ${done?'done':''}" onclick="toggleRoutine(${r.id})">${done?'✓':''}</div>
-                    <span class="check-emoji">${r.emoji||'💚'}</span>
-                    <span class="check-name ${done?'done':''}">${escapeHtml(r.name)}</span>
+        let rHtml = routines.map(r => {
+            const done = (r.checkHistory || []).includes(checkDateStr);
+            return `<div class="check-item">
+                <div class="check-box ${done?'done':''}" onclick="toggleRoutine(${r.id})">${done?'✓':''}</div>
+                <span class="check-emoji">${r.emoji||'💚'}</span>
+                <span class="check-name ${done?'done':''}">${escapeHtml(r.name)}</span>
+            </div>`;
+        }).join('');
+
+        cycleRoutines.forEach(cr => {
+            if (!cr.items || cr.items.length === 0) return;
+            const rec = cycleDoneOn(cr, checkDateStr);
+            if (rec) {
+                // 신은 기록 있음 → 완료 표시 (오늘이면 되돌리기 가능)
+                rHtml += `<div class="check-item">
+                    <div class="check-box done" ${isToday?`onclick="toggleCycle(${cr.id})"`:''}>✓</div>
+                    <span class="check-emoji">${cr.emoji||'🔁'}</span>
+                    <span class="check-name done">${escapeHtml(cr.name)}: ${escapeHtml(rec)}</span>
                 </div>`;
-            }).join('');
-        }
+            } else if (isToday) {
+                const c = cycleTodayItem(cr);
+                rHtml += `<div class="check-item">
+                    <div class="check-box" onclick="toggleCycle(${cr.id})"></div>
+                    <span class="check-emoji">${cr.emoji||'🔁'}</span>
+                    <span class="check-name">${escapeHtml(cr.name)}: <b>${escapeHtml(c.item)}</b></span>
+                </div>`;
+            }
+            // 과거·미래 기록 없음 → 표시 안 함
+        });
+
+        if (!rHtml) rHtml = '<div class="empty">관리 탭에서 루틴을 추가해 보세요</div>';
+        rEl.innerHTML = rHtml;
 
         // 이 날 할 일 (프로젝트 영역 → 단독 영역, 시각적으로 구분)
         const tEl = document.getElementById('dayTaskList');
@@ -830,6 +906,95 @@
                     <button class="icon-btn del" onclick="deleteRoutine(${r.id})">삭제</button>
                 </div>
             </div>`).join('');
+    }
+
+    // ══════════ 순환 루틴 CRUD ══════════
+    function addCycleRoutine() {
+        const emoji = document.getElementById('newCycleEmoji').value.trim() || '🔁';
+        const name = document.getElementById('newCycleName').value.trim();
+        if (!name) { showToast('순환 루틴 이름을 입력해 주세요'); return; }
+        cycleRoutines.push({ id: Date.now(), name, emoji, items: [], currentIndex: 0, memos: [], history: [] });
+        document.getElementById('newCycleEmoji').value = '';
+        document.getElementById('newCycleName').value = '';
+        syncAll();
+        showToast(`${emoji} [${name}] 순환 루틴이 추가됐어요. 아래에서 항목을 추가하세요`);
+    }
+    function deleteCycleRoutine(id) {
+        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
+        askConfirm(`[${cr.name}] 순환 루틴을 삭제할까요?`, () => {
+            cycleRoutines = cycleRoutines.filter(x => x.id !== id);
+            syncAll();
+            showToast('🗑️ 순환 루틴이 삭제됐어요');
+        });
+    }
+    function addCycleItem(id) {
+        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
+        const input = document.getElementById('cycleItemInput_' + id);
+        const val = input.value.trim();
+        if (!val) { showToast('항목을 입력해 주세요'); return; }
+        cr.items.push(val);
+        input.value = '';
+        syncAll();
+    }
+    function deleteCycleItem(id, idx) {
+        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
+        cr.items.splice(idx, 1);
+        if (cr.items.length === 0) cr.currentIndex = 0;
+        else cr.currentIndex = ((cr.currentIndex % cr.items.length) + cr.items.length) % cr.items.length;
+        syncAll();
+    }
+    function moveCycleItem(id, idx, dir) {
+        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
+        const j = idx + dir;
+        if (j < 0 || j >= cr.items.length) return;
+        const tmp = cr.items[idx]; cr.items[idx] = cr.items[j]; cr.items[j] = tmp;
+        syncAll();
+    }
+    // 체크 탭: 오늘 차례 착용/되돌리기 (오늘만)
+    function toggleCycle(id) {
+        const cr = cycleRoutines.find(x => x.id === id); if (!cr || !cr.items.length) return;
+        const today = getTodayStr();
+        cr.history = cr.history || [];
+        const recIdx = cr.history.findIndex(h => h.date === today);
+        const len = cr.items.length;
+        if (recIdx >= 0) {
+            cr.history.splice(recIdx, 1);
+            cr.currentIndex = (((cr.currentIndex - 1) % len) + len) % len;
+        } else {
+            const c = cycleTodayItem(cr); if (!c) return;
+            cr.history.push({ date: today, item: c.item });
+            cr.currentIndex = (cr.currentIndex + 1) % len;
+        }
+        syncAll();
+    }
+    function renderCycleMng() {
+        const el = document.getElementById('cycleMngList');
+        if (cycleRoutines.length === 0) { el.innerHTML = '<div class="empty">등록된 순환 루틴이 없어요</div>'; return; }
+        el.innerHTML = cycleRoutines.map(cr => {
+            const c = cycleTodayItem(cr);
+            const itemsHtml = cr.items.length ? cr.items.map((it, i) => `
+                <div class="cycle-item ${c && c.idx === i ? 'cur' : ''}">
+                    <span style="flex:1;">${i + 1}. ${escapeHtml(it)}${c && c.idx === i ? ' <span style="color:var(--primary); font-weight:bold;">← 지금 차례</span>' : ''}</span>
+                    <button class="icon-btn" onclick="moveCycleItem(${cr.id},${i},-1)">▲</button>
+                    <button class="icon-btn" onclick="moveCycleItem(${cr.id},${i},1)">▼</button>
+                    <button class="icon-btn del" onclick="deleteCycleItem(${cr.id},${i})">✕</button>
+                </div>`).join('') : '<div style="font-size:12px; color:#bbb; padding:6px 0;">항목을 추가해 주세요</div>';
+            return `
+            <div class="mng-item" style="flex-direction:column; align-items:stretch; gap:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="mng-name"><span class="check-emoji">${cr.emoji||'🔁'}</span> ${escapeHtml(cr.name)}</div>
+                    <div class="mng-actions">
+                        <button class="icon-btn del" onclick="deleteCycleRoutine(${cr.id})">삭제</button>
+                    </div>
+                </div>
+                <div style="margin-top:2px;">${itemsHtml}</div>
+                <div class="form-row" style="margin:4px 0 0;">
+                    <input type="text" id="cycleItemInput_${cr.id}" placeholder="항목 추가 (예: 아식스)" style="flex:1;">
+                    <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;" onclick="addCycleItem(${cr.id})">추가</button>
+                </div>
+                ${renderMemos('cycle', cr.id, cr.memos)}
+            </div>`;
+        }).join('');
     }
 
     // ══════════ 프로젝트 CRUD ══════════
@@ -1006,6 +1171,7 @@
     function getMemoHolder() {
         if (!memoTarget) return null;
         if (memoTarget.kind === 'routine') return routines.find(x => x.id === memoTarget.id);
+        if (memoTarget.kind === 'cycle') return cycleRoutines.find(x => x.id === memoTarget.id);
         if (memoTarget.kind === 'project') return projects.find(x => x.id === memoTarget.id);
         if (memoTarget.kind === 'task') return findTask(memoTarget.id, memoTarget.taskId);
         return null;
@@ -1021,14 +1187,16 @@
         showToast('📝 메모가 추가됐어요');
     }
     function deleteMemo(kind, id, idx) {
-        const holder = kind === 'routine' ? routines.find(x => x.id === id) : projects.find(x => x.id === id);
+        const holder = kind === 'routine' ? routines.find(x => x.id === id)
+            : kind === 'cycle' ? cycleRoutines.find(x => x.id === id)
+            : projects.find(x => x.id === id);
         if (holder && holder.memos) holder.memos.splice(idx, 1);
         syncAll();
     }
 
     // ══════════ 백업 / 복원 ══════════
     function exportBackup() {
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks };
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1049,6 +1217,7 @@
                 routines = parsed.routines;
                 projects = parsed.projects;
                 standaloneTasks = Array.isArray(parsed.standaloneTasks) ? parsed.standaloneTasks : [];
+                cycleRoutines = Array.isArray(parsed.cycleRoutines) ? parsed.cycleRoutines : [];
                 syncAll();
                 showToast('✅ 백업 데이터를 불러왔어요');
             } catch (err) {
@@ -1088,6 +1257,7 @@
         renderHome();
         renderCheckTab();
         renderRoutineMng();
+        renderCycleMng();
         renderProjectMng();
         updateLastSavedLabel();
     };
