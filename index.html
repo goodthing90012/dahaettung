@@ -517,10 +517,12 @@
         document.getElementById('homeTodayTotal').textContent = rStats.total;
         const pct = getActiveProjectPct();
         document.getElementById('homeProjPct').textContent = pct === null ? '–' : pct + '%';
-        const yItems = collectDayItems(getYesterdayStr());
-        const tItems = collectDayItems(getTodayStr());
+        const prevDay = findPrevTaskDay();
+        const pTasks = prevDay ? collectDayTasks(prevDay) : [];
+        const tTasks = collectDayTasks(getTodayStr());
+        const prevLabel = prevDay ? `직전 ${countDone(pTasks)}/${pTasks.length}` : '직전 일정 없음';
         document.getElementById('briefingPreview').innerHTML =
-            `<span>어제 ${countDone(yItems)}/${yItems.length} · 오늘 ${countDone(tItems)}/${tItems.length}</span><span class="go">브리핑 보기 ›</span>`;
+            `<span>${prevLabel} · 오늘 ${countDone(tTasks)}/${tTasks.length}</span><span class="go">브리핑 보기 ›</span>`;
         renderCalendar();
     }
     function renderCalendar() {
