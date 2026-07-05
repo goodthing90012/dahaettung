@@ -700,12 +700,20 @@
     }
     function countDone(items) { return items.filter(i => i.done).length; }
     // 어제 미완료 중 오늘로 이월 가능한 할 일 (루틴 제외)
-    function collectCarry() {
-        const y = getYesterdayStr(), today = getTodayStr();
+    function collectCarry(fromDate) {
+        const from = fromDate || getYesterdayStr(), today = getTodayStr();
         const list = [];
-        standaloneTasks.forEach(t => { if (!t.done && t.date === y) list.push({ kind: 's', taskId: t.id, name: t.name }); });
-        projects.forEach(p => { if (projectActiveOn(p, today)) (p.tasks || []).forEach(t => { if (!t.done && t.date === y) list.push({ kind: 'p', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }); }); });
+        standaloneTasks.forEach(t => { if (!t.done && t.date === from) list.push({ kind: 's', taskId: t.id, name: t.name }); });
+        projects.forEach(p => { if (projectActiveOn(p, today)) (p.tasks || []).forEach(t => { if (!t.done && t.date === from) list.push({ kind: 'p', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }); }); });
         return list;
+    }
+    // 어제부터 거슬러 올라가며 할 일이 있던 가장 최근 날 (최대 14일)
+    function findPrevTaskDay() {
+        for (let i = 1; i <= 14; i++) {
+            const d = addDaysStr(getTodayStr(), -i);
+            if (collectDayTasks(d).length > 0) return d;
+        }
+        return null;
     }
 
     // 특정 날짜의 할 일만 (루틴 제외) + 완료 여부
@@ -722,9 +730,10 @@
     function renderBriefing() {
         const y = getYesterdayStr(), today = getTodayStr();
         document.getElementById('briefingTitle').textContent = `오늘 브리핑 · ${krLabel(today)}`;
-        const yTasks = collectDayTasks(y);
+        const prevDay = findPrevTaskDay();
+        const pTasks = prevDay ? collectDayTasks(prevDay) : [];
         const tTasks = collectDayTasks(today);
-        const carry = collectCarry();
+        const carry = prevDay ? collectCarry(prevDay) : [];
         let html = '';
 
         // 💚 루틴 (어제·오늘 상태 나란히)
@@ -749,11 +758,12 @@
             }).join('');
         }
 
-        // 📅 어제 한 일 (할 일만)
-        html += `<div class="brief-sec-title">📅 어제 한 일 <span style="color:#aaa; font-weight:normal;">(${countDone(yTasks)}/${yTasks.length})</span></div>`;
-        html += yTasks.length ? briefRows(yTasks, y) : '<div class="brief-empty">어제 할 일이 없어요</div>';
+        // 📅 직전 일정 (할 일만, 가장 최근에 할 일이 있던 날)
+        const prevLabel = prevDay ? ` · ${krLabel(prevDay)} <span style="color:#aaa; font-weight:normal;">(${countDone(pTasks)}/${pTasks.length})</span>` : '';
+        html += `<div class="brief-sec-title">📅 직전 일정${prevLabel}</div>`;
+        html += pTasks.length ? briefRows(pTasks, prevDay) : '<div class="brief-empty">최근 일정이 없어요</div>';
         if (carry.length) {
-            html += `<div class="brief-carry"><span>⏭️ 어제 못 끝낸 할 일 ${carry.length}개</span><button onclick="carryOverYesterday()">오늘로 가져오기</button></div>`;
+            html += `<div class="brief-carry"><span>⏭️ 못 끝낸 할 일 ${carry.length}개</span><button onclick="carryOverPrev()">오늘로 가져오기</button></div>`;
         }
 
         // 📝 오늘 할 일 (할 일만)
@@ -762,8 +772,9 @@
 
         document.getElementById('briefingBody').innerHTML = html;
     }
-    function carryOverYesterday() {
-        const list = collectCarry();
+    function carryOverPrev() {
+        const prevDay = findPrevTaskDay();
+        const list = prevDay ? collectCarry(prevDay) : [];
         if (list.length === 0) { showToast('이월할 할 일이 없어요'); return; }
         const today = getTodayStr();
         list.forEach(it => {
@@ -776,7 +787,8 @@
     }
     function buildBriefingText() {
         const y = getYesterdayStr(), today = getTodayStr();
-        const yTasks = collectDayTasks(y);
+        const prevDay = findPrevTaskDay();
+        const pTasks = prevDay ? collectDayTasks(prevDay) : [];
         const tTasks = collectDayTasks(today);
         const line = d => `- ${d.done ? '✅' : '⬜'} ${d.name}`;
         let s = `📋 다했텅 브리핑 (${krLabel(today)})\n`;
@@ -784,8 +796,8 @@
             s += `\n💚 루틴\n`;
             s += routines.map(r => `- ${r.name} (어제 ${(r.checkHistory || []).includes(y) ? '✅' : '⬜'} · 오늘 ${(r.checkHistory || []).includes(today) ? '✅' : '⬜'})`).join('\n');
         }
-        s += `\n\n📅 어제 한 일 (${countDone(yTasks)}/${yTasks.length})\n`;
-        s += yTasks.length ? yTasks.map(line).join('\n') : '- (없음)';
+        s += `\n\n📅 직전 일정${prevDay ? ` (${krLabel(prevDay)}, ${countDone(pTasks)}/${pTasks.length})` : ''}\n`;
+        s += pTasks.length ? pTasks.map(line).join('\n') : '- (없음)';
         s += `\n\n📝 오늘 할 일 (${countDone(tTasks)}/${tTasks.length})\n`;
         s += tTasks.length ? tTasks.map(line).join('\n') : '- (없음)';
         return s;
