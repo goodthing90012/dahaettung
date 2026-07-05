@@ -958,19 +958,27 @@
         if (i >= 0) r.checkHistory.splice(i, 1); else r.checkHistory.push(checkDateStr);
         syncAll();
     }
-    let editingRoutineId = null;
-    function editRoutine(id) {
-        const r = routines.find(x => x.id === id); if (!r) return;
-        editingRoutineId = id;
+    let editingRoutineRef = null; // { kind, id }
+    function editRoutineGeneric(kind, id) {
+        const arr = kind === 'cycle' ? cycleRoutines : kind === 'weekday' ? weekdayRoutines : routines;
+        const r = arr.find(x => x.id === id); if (!r) return;
+        editingRoutineRef = { kind, id };
         document.getElementById('editRoutineEmoji').value = r.emoji;
         document.getElementById('editRoutineName').value = r.name;
         openOverlay('routineEditOverlay');
     }
+    function editRoutine(id) { editRoutineGeneric('routine', id); }
+    function editCycleRoutine(id) { editRoutineGeneric('cycle', id); }
+    function editWeekdayRoutine(id) { editRoutineGeneric('weekday', id); }
     function saveEditRoutine() {
-        const r = routines.find(x => x.id === editingRoutineId); if (!r) return;
+        if (!editingRoutineRef) return;
+        const { kind, id } = editingRoutineRef;
+        const arr = kind === 'cycle' ? cycleRoutines : kind === 'weekday' ? weekdayRoutines : routines;
+        const r = arr.find(x => x.id === id); if (!r) return;
         const name = document.getElementById('editRoutineName').value.trim();
         if (!name) { showToast('루틴 이름을 입력해 주세요'); return; }
-        r.emoji = document.getElementById('editRoutineEmoji').value.trim() || '💚';
+        const fallback = kind === 'cycle' ? '🔁' : kind === 'weekday' ? '📅' : '💚';
+        r.emoji = document.getElementById('editRoutineEmoji').value.trim() || fallback;
         r.name = name;
         closeOverlay('routineEditOverlay');
         syncAll();
@@ -1077,6 +1085,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div class="mng-name"><span class="check-emoji">${cr.emoji||'🔁'}</span> ${escapeHtml(cr.name)}</div>
                     <div class="mng-actions">
+                        <button class="icon-btn" onclick="editCycleRoutine(${cr.id})">수정</button>
                         <button class="icon-btn del" onclick="deleteCycleRoutine(${cr.id})">삭제</button>
                     </div>
                 </div>
@@ -1130,6 +1139,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div class="mng-name"><span class="check-emoji">${wr.emoji||'📅'}</span> ${escapeHtml(wr.name)}</div>
                     <div class="mng-actions">
+                        <button class="icon-btn" onclick="editWeekdayRoutine(${wr.id})">수정</button>
                         <button class="icon-btn del" onclick="deleteWeekdayRoutine(${wr.id})">삭제</button>
                     </div>
                 </div>
