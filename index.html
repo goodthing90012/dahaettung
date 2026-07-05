@@ -441,6 +441,15 @@
     function countRoutineDone(dateStr) {
         return routines.filter(r => (r.checkHistory || []).includes(dateStr)).length;
     }
+    // 오늘 루틴 달성 (일반 + 순환 + 요일 합산, 할 일/프로젝트 제외)
+    function todayRoutineStats() {
+        const today = getTodayStr();
+        let total = 0, done = 0;
+        routines.forEach(r => { total++; if ((r.checkHistory || []).includes(today)) done++; });
+        cycleRoutines.forEach(cr => { if (cr.items && cr.items.length) { total++; if (cycleDoneOn(cr, today)) done++; } });
+        weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, today)) { total++; if (weekdayIsDone(wr, today)) done++; } });
+        return { done, total };
+    }
     // 그날 등록된 모든 일정(루틴+프로젝트 할 일+단독 할 일) 기준 완료 판정
     function dayItemsStatus(dateStr) {
         const items = collectDayItems(dateStr);
@@ -503,8 +512,9 @@
     }
     function renderHome() {
         const todayStr = getTodayStr();
-        document.getElementById('homeTodayDone').firstChild.textContent = countRoutineDone(todayStr);
-        document.getElementById('homeTodayTotal').textContent = routines.length;
+        const rStats = todayRoutineStats();
+        document.getElementById('homeTodayDone').firstChild.textContent = rStats.done;
+        document.getElementById('homeTodayTotal').textContent = rStats.total;
         const pct = getActiveProjectPct();
         document.getElementById('homeProjPct').textContent = pct === null ? '–' : pct + '%';
         const yItems = collectDayItems(getYesterdayStr());
