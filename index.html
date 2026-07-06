@@ -62,13 +62,33 @@
         .briefing-preview .go { opacity: 0.85; }
 
         /* 브리핑 상세 */
-        .brief-sec-title { font-size: 13px; font-weight: bold; color: var(--text); margin: 12px 0 6px; }
+        .brief-sec-title { font-size: 14px; font-weight: bold; color: var(--text); margin: 18px 0 8px; display: flex; align-items: center; gap: 4px; }
         .brief-sec-title:first-child { margin-top: 0; }
-        .brief-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid #f2f2f2; font-size: 13px; cursor: pointer; }
+        .brief-row { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid #f2f2f2; font-size: 14px; cursor: pointer; }
         .brief-row:active { background: #f7f7f7; }
-        .brief-carry { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FFF7F1; border: 1px solid #FBEADD; border-radius: 10px; padding: 8px 10px; margin-top: 8px; font-size: 12px; }
-        .brief-carry button { background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 6px 10px; cursor: pointer; flex-shrink: 0; }
-        .brief-empty { font-size: 12px; color: #bbb; padding: 8px 4px; }
+        .brief-carry { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FFF7F1; border: 1px solid #FBEADD; border-radius: 10px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
+        .brief-carry button { background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 7px 12px; cursor: pointer; flex-shrink: 0; }
+        .brief-empty { font-size: 13px; color: #bbb; padding: 10px 4px; }
+
+        /* 브리핑 전체화면 */
+        #briefingOverlay { padding: 0; align-items: stretch; }
+        .briefing-fs { display: flex; flex-direction: column; width: 100%; height: 100%; max-width: 480px; margin: 0 auto; background: var(--bg); }
+        .brief-header { position: relative; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: #fff; padding: 12px 14px 16px; box-shadow: 0 2px 8px rgba(34,176,125,0.25); }
+        .brief-header-top { position: relative; display: flex; align-items: center; justify-content: center; min-height: 38px; }
+        .brief-header-label { font-size: 13px; opacity: 0.95; font-weight: 700; }
+        .brief-close { position: absolute; right: 0; top: 0; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255,255,255,0.22); color: #fff; font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .brief-close:active { background: rgba(255,255,255,0.4); }
+        .brief-datenav { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
+        .brief-datenav button { background: rgba(255,255,255,0.18); border: none; color: #fff; font-size: 20px; width: 38px; height: 38px; border-radius: 10px; cursor: pointer; line-height: 1; }
+        .brief-datenav button:active { background: rgba(255,255,255,0.32); }
+        .brief-datenav #briefingTitle { font-size: 17px; font-weight: 800; min-width: 170px; text-align: center; }
+        .brief-body { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
+        .brief-card { background: var(--card); border-radius: 18px; padding: 16px 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.05); }
+        .brief-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid #eee; display: flex; flex-direction: row; gap: 10px; }
+        .brief-copy-btn { flex: 2; padding: 14px; border: none; border-radius: 12px; background: var(--primary); color: #fff; font-size: 15px; font-weight: bold; cursor: pointer; }
+        .brief-copy-btn:active { background: var(--primary-dark); }
+        .brief-close-btn { flex: 1; padding: 14px; border: none; border-radius: 12px; background: #F0F0F0; color: #555; font-size: 14px; font-weight: bold; cursor: pointer; }
+        .brief-close-btn:active { background: #e4e4e4; }
 
         /* 달력 */
         .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -396,16 +416,24 @@
 
 <!-- 오늘 브리핑 팝업 -->
 <div class="overlay" id="briefingOverlay">
-    <div class="modal" style="max-width:340px;">
-        <div class="date-nav" style="margin-bottom:12px;">
-            <button onclick="changeBriefingDate(-1)">‹</button>
-            <div class="lbl" id="briefingTitle" style="font-size:15px;"></div>
-            <button onclick="changeBriefingDate(1)">›</button>
+    <div class="briefing-fs">
+        <div class="brief-header">
+            <div class="brief-header-top">
+                <span class="brief-header-label">📋 브리핑</span>
+                <button class="brief-close" onclick="closeOverlay('briefingOverlay')">✕</button>
+            </div>
+            <div class="brief-datenav">
+                <button onclick="changeBriefingDate(-1)">‹</button>
+                <div id="briefingTitle"></div>
+                <button onclick="changeBriefingDate(1)">›</button>
+            </div>
         </div>
-        <div id="briefingBody" style="max-height:56vh; overflow-y:auto;"></div>
-        <div class="modal-btn-row">
-            <button class="modal-btn no" onclick="closeOverlay('briefingOverlay')">닫기</button>
-            <button class="modal-btn yes" onclick="copyBriefing()">📋 복사</button>
+        <div class="brief-body">
+            <div id="briefingBody" class="brief-card"></div>
+        </div>
+        <div class="brief-footer">
+            <button class="brief-close-btn" onclick="closeOverlay('briefingOverlay')">닫기</button>
+            <button class="brief-copy-btn" onclick="copyBriefing()">📋 슬랙에 복사</button>
         </div>
     </div>
 </div>
@@ -756,7 +784,8 @@
     function changeBriefingDate(dir) { briefingDate = addDaysStr(briefingDate, dir); renderBriefing(); }
     function renderBriefing() {
         const ref = briefingDate, y = addDaysStr(ref, -1), isToday = ref === getTodayStr();
-        document.getElementById('briefingTitle').textContent = `${isToday ? '오늘 ' : ''}브리핑 · ${krLabel(ref)}`;
+        const refPrefix = isToday ? '오늘 · ' : (ref > getTodayStr() ? '예정 · ' : '');
+        document.getElementById('briefingTitle').textContent = `${refPrefix}${krLabel(ref)}`;
         const prevDay = findPrevTaskDay(ref);
         const pTasks = prevDay ? collectDayTasks(prevDay) : [];
         const tTasks = collectDayTasks(ref);
