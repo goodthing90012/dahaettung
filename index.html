@@ -120,6 +120,8 @@
         .color-picker { display: flex; gap: 8px; margin-top: 4px; }
         .cycle-item { display: flex; align-items: center; gap: 4px; padding: 5px 4px; border-bottom: 1px solid #f4f4f4; font-size: 13px; }
         .cycle-item.cur { background: var(--primary-tint); border-radius: 8px; }
+        .seg-btn { flex: 1; padding: 8px; border: 1px solid #ddd; background: #fff; border-radius: 9px; font-size: 13px; font-weight: bold; color: #888; cursor: pointer; }
+        .seg-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
         .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; }
         .color-swatch.sel { border-color: #333; }
 
@@ -330,8 +332,24 @@
         <h3 id="taskModalTitle">할 일 추가</h3>
         <input type="text" id="taskName" placeholder="할 일 내용" style="margin-bottom:6px;">
         <div id="taskDateGroup">
-            <label class="fld">날짜</label>
-            <input type="date" id="taskDate">
+            <div id="taskModeRow" style="display:flex; gap:6px; margin-bottom:8px;">
+                <button type="button" id="taskModeOne" class="seg-btn active" onclick="setTaskMode('one')">하루</button>
+                <button type="button" id="taskModeRange" class="seg-btn" onclick="setTaskMode('range')">기간</button>
+            </div>
+            <div id="taskOneWrap">
+                <label class="fld">날짜</label>
+                <input type="date" id="taskDate">
+            </div>
+            <div id="taskRangeWrap" style="display:none;">
+                <div id="taskProjectRangeBtnWrap" style="display:none; margin-bottom:6px;">
+                    <button type="button" class="btn btn-ghost btn-sm" style="width:100%;" onclick="fillProjectRange()">📁 프로젝트 기간 전체로</button>
+                </div>
+                <label class="fld">시작일</label>
+                <input type="date" id="taskStartDate" style="margin-bottom:6px;">
+                <label class="fld">종료일</label>
+                <input type="date" id="taskEndDate">
+                <div id="taskRangeHint" style="font-size:11px; color:#999; margin-top:6px;"></div>
+            </div>
         </div>
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('taskOverlay')">취소</button>
@@ -1240,6 +1258,7 @@
     // ══════════ 태스크(할 일) ══════════
     // projectId === null 이면 단독 할 일
     let taskProjectId = null;
+    let taskMode = 'one';
     let editingTask = null; // { projectId, taskId } 또는 null(추가 모드)
     function getTaskList(projectId) {
         if (projectId === null || projectId === 'null') return standaloneTasks;
@@ -1255,8 +1274,33 @@
         document.getElementById('taskModalTitle').textContent = p ? `${p.name} · 할 일 추가` : '단독 할 일 추가';
         document.getElementById('taskName').value = '';
         document.getElementById('taskDate').value = checkDateStr;
+        document.getElementById('taskStartDate').value = p ? p.startDate : checkDateStr;
+        document.getElementById('taskEndDate').value = p ? p.endDate : checkDateStr;
         document.getElementById('taskDateGroup').style.display = 'block';
+        document.getElementById('taskModeRow').style.display = 'flex';
+        // 프로젝트 기간 전체 버튼은 프로젝트 할 일일 때만
+        document.getElementById('taskProjectRangeBtnWrap').style.display = p ? 'block' : 'none';
+        setTaskMode('one');
         openOverlay('taskOverlay');
+    }
+    function setTaskMode(mode) {
+        taskMode = mode;
+        document.getElementById('taskModeOne').classList.toggle('active', mode === 'one');
+        document.getElementById('taskModeRange').classList.toggle('active', mode === 'range');
+        document.getElementById('taskOneWrap').style.display = mode === 'one' ? 'block' : 'none';
+        document.getElementById('taskRangeWrap').style.display = mode === 'range' ? 'block' : 'none';
+        updateRangeHint();
+    }
+    function fillProjectRange() {
+        const p = projects.find(x => x.id === taskProjectId); if (!p) return;
+        document.getElementById('taskStartDate').value = p.startDate;
+        document.getElementById('taskEndDate').value = p.endDate;
+        updateRangeHint();
+    }
+    function updateRangeHint() {
+        const hintEl = document.getElementById('taskRangeHint'); if (!hintEl) return;
+        const p = (taskProjectId === null) ? null : projects.find(x => x.id === taskProjectId);
+        hintEl.textContent = p ? `※ 프로젝트 기간(${p.startDate} ~ ${p.endDate})을 벗어난 날짜는 자동 제외돼요` : '';
     }
     function editTask(projectId, taskId) {
         const t = findTask(projectId, taskId); if (!t) return;
@@ -1279,6 +1323,31 @@
             return;
         }
         const list = getTaskList(taskProjectId); if (!list) return;
+
+        if (taskMode === 'range') {
+            let start = document.getElementById('taskStartDate').value;
+            let end = document.getElementById('taskEndDate').value;
+            if (!start || !end) { showToast('시작일과 종료일을 선택해 주세요'); return; }
+            if (start > end) { const tmp = start; start = end; end = tmp; }
+            // 프로젝트 할 일이면 프로젝트 기간으로 클램프
+            const p = (taskProjectId === null) ? null : projects.find(x => x.id === taskProjectId);
+            if (p) {
+                if (start < p.startDate) start = p.startDate;
+                if (end > p.endDate) end = p.endDate;
+                if (start > end) { showToast('프로젝트 기간과 겹치는 날짜가 없어요'); return; }
+            }
+            let count = 0;
+            for (let d = start; d <= end; d = addDaysStr(d, 1)) {
+                list.push({ id: Date.now() + count, date: d, name, done: false, memos: [] });
+                count++;
+                if (count > 366) break; // 안전장치
+            }
+            closeOverlay('taskOverlay');
+            syncAll();
+            showToast(`✅ ${count}일에 일괄 등록됐어요`);
+            return;
+        }
+
         const date = document.getElementById('taskDate').value;
         if (!date) { showToast('날짜를 선택해 주세요'); return; }
         list.push({ id: Date.now(), date, name, done: false, memos: [] });
