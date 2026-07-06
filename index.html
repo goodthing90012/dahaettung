@@ -397,8 +397,12 @@
 <!-- 오늘 브리핑 팝업 -->
 <div class="overlay" id="briefingOverlay">
     <div class="modal" style="max-width:340px;">
-        <h3 id="briefingTitle">오늘 브리핑</h3>
-        <div id="briefingBody" style="max-height:60vh; overflow-y:auto;"></div>
+        <div class="date-nav" style="margin-bottom:12px;">
+            <button onclick="changeBriefingDate(-1)">‹</button>
+            <div class="lbl" id="briefingTitle" style="font-size:15px;"></div>
+            <button onclick="changeBriefingDate(1)">›</button>
+        </div>
+        <div id="briefingBody" style="max-height:56vh; overflow-y:auto;"></div>
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('briefingOverlay')">닫기</button>
             <button class="modal-btn yes" onclick="copyBriefing()">📋 복사</button>
@@ -720,17 +724,18 @@
     }
     function countDone(items) { return items.filter(i => i.done).length; }
     // 어제 미완료 중 오늘로 이월 가능한 할 일 (루틴 제외)
-    function collectCarry(fromDate) {
-        const from = fromDate || getYesterdayStr(), today = getTodayStr();
+    function collectCarry(fromDate, refDate) {
+        const from = fromDate || getYesterdayStr(), ref = refDate || getTodayStr();
         const list = [];
         standaloneTasks.forEach(t => { if (!t.done && t.date === from) list.push({ kind: 's', taskId: t.id, name: t.name }); });
-        projects.forEach(p => { if (projectActiveOn(p, today)) (p.tasks || []).forEach(t => { if (!t.done && t.date === from) list.push({ kind: 'p', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }); }); });
+        projects.forEach(p => { if (projectActiveOn(p, ref)) (p.tasks || []).forEach(t => { if (!t.done && t.date === from) list.push({ kind: 'p', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }); }); });
         return list;
     }
-    // 어제부터 거슬러 올라가며 할 일이 있던 가장 최근 날 (최대 14일)
-    function findPrevTaskDay() {
+    // 기준일부터 거슬러 올라가며 할 일이 있던 가장 최근 날 (최대 14일)
+    function findPrevTaskDay(refDate) {
+        const base = refDate || getTodayStr();
         for (let i = 1; i <= 14; i++) {
-            const d = addDaysStr(getTodayStr(), -i);
+            const d = addDaysStr(base, -i);
             if (collectDayTasks(d).length > 0) return d;
         }
         return null;
@@ -746,79 +751,82 @@
     function briefRows(items, dateStr) {
         return items.map(d => `<div class="brief-row" onclick="goToCheckDate('${dateStr}')"><span>${d.done ? '✅' : '⬜'}</span><span style="flex:1; ${d.done ? 'color:#aaa; text-decoration:line-through;' : ''}">${escapeHtml(d.name)}</span></div>`).join('');
     }
-    function openBriefing() { renderBriefing(); openOverlay('briefingOverlay'); }
+    let briefingDate = getTodayStr();
+    function openBriefing() { briefingDate = getTodayStr(); renderBriefing(); openOverlay('briefingOverlay'); }
+    function changeBriefingDate(dir) { briefingDate = addDaysStr(briefingDate, dir); renderBriefing(); }
     function renderBriefing() {
-        const y = getYesterdayStr(), today = getTodayStr();
-        document.getElementById('briefingTitle').textContent = `오늘 브리핑 · ${krLabel(today)}`;
-        const prevDay = findPrevTaskDay();
+        const ref = briefingDate, y = addDaysStr(ref, -1), isToday = ref === getTodayStr();
+        document.getElementById('briefingTitle').textContent = `${isToday ? '오늘 ' : ''}브리핑 · ${krLabel(ref)}`;
+        const prevDay = findPrevTaskDay(ref);
         const pTasks = prevDay ? collectDayTasks(prevDay) : [];
-        const tTasks = collectDayTasks(today);
-        const carry = prevDay ? collectCarry(prevDay) : [];
+        const tTasks = collectDayTasks(ref);
+        const carry = prevDay ? collectCarry(prevDay, ref) : [];
         let html = '';
 
-        // 💚 루틴 (어제·오늘 상태 나란히)
+        // 💚 루틴 (전날·기준일 상태 나란히)
         if (routines.length || cycleRoutines.length || weekdayRoutines.length) {
             html += '<div class="brief-sec-title">💚 루틴</div>';
             html += routines.map(r => {
                 const yD = (r.checkHistory || []).includes(y);
-                const tD = (r.checkHistory || []).includes(today);
-                return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">${escapeHtml(r.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">어제 ${yD ? '✅' : '⬜'} · 오늘 ${tD ? '✅' : '⬜'}</span></div>`;
+                const tD = (r.checkHistory || []).includes(ref);
+                return `<div class="brief-row" onclick="goToCheckDate('${ref}')"><span style="flex:1;">${escapeHtml(r.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">전날 ${yD ? '✅' : '⬜'} · 당일 ${tD ? '✅' : '⬜'}</span></div>`;
             }).join('');
             html += cycleRoutines.map(cr => {
                 const yRec = cycleDoneOn(cr, y);
-                const tRec = cycleDoneOn(cr, today);
-                const todayLabel = tRec ? `✅ ${escapeHtml(tRec)}` : (cycleTodayItem(cr) ? `⬜ ${escapeHtml(cycleTodayItem(cr).item)}` : '—');
-                return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">🔁 ${escapeHtml(cr.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">${yRec ? '어제 '+escapeHtml(yRec)+' · ' : ''}오늘 ${todayLabel}</span></div>`;
+                const tRec = cycleDoneOn(cr, ref);
+                const pending = (isToday && !tRec && cycleTodayItem(cr)) ? cycleTodayItem(cr).item : null;
+                const tLabel = tRec ? `✅ ${escapeHtml(tRec)}` : (pending ? `⬜ ${escapeHtml(pending)}` : '—');
+                return `<div class="brief-row" onclick="goToCheckDate('${ref}')"><span style="flex:1;">🔁 ${escapeHtml(cr.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">${yRec ? '전날 '+escapeHtml(yRec)+' · ' : ''}당일 ${tLabel}</span></div>`;
             }).join('');
             html += weekdayRoutines.map(wr => {
-                const item = weekdayDisplayItem(wr, today);
+                const item = weekdayDisplayItem(wr, ref);
                 if (!item) return '';
-                const tD = weekdayIsDone(wr, today);
-                return `<div class="brief-row" onclick="goToCheckDate('${today}')"><span style="flex:1;">📅 ${escapeHtml(wr.name)}: ${escapeHtml(item)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">오늘 ${tD ? '✅' : '⬜'}</span></div>`;
+                const tD = weekdayIsDone(wr, ref);
+                return `<div class="brief-row" onclick="goToCheckDate('${ref}')"><span style="flex:1;">📅 ${escapeHtml(wr.name)}: ${escapeHtml(item)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">당일 ${tD ? '✅' : '⬜'}</span></div>`;
             }).join('');
         }
 
-        // 📅 직전 일정 (할 일만, 가장 최근에 할 일이 있던 날)
+        // 📅 직전 일정 (할 일만, 기준일 이전 가장 최근에 할 일이 있던 날)
         const prevLabel = prevDay ? ` · ${krLabel(prevDay)} <span style="color:#aaa; font-weight:normal;">(${countDone(pTasks)}/${pTasks.length})</span>` : '';
         html += `<div class="brief-sec-title">📅 직전 일정${prevLabel}</div>`;
-        html += pTasks.length ? briefRows(pTasks, prevDay) : '<div class="brief-empty">최근 일정이 없어요</div>';
+        html += pTasks.length ? briefRows(pTasks, prevDay) : '<div class="brief-empty">이전 일정이 없어요</div>';
         if (carry.length) {
-            html += `<div class="brief-carry"><span>⏭️ 못 끝낸 할 일 ${carry.length}개</span><button onclick="carryOverPrev()">오늘로 가져오기</button></div>`;
+            html += `<div class="brief-carry"><span>⏭️ 못 끝낸 할 일 ${carry.length}개</span><button onclick="carryOverPrev()">${isToday ? '오늘로' : '이 날로'} 가져오기</button></div>`;
         }
 
-        // 📝 오늘 할 일 (할 일만)
-        html += `<div class="brief-sec-title">📝 오늘 할 일 <span style="color:#aaa; font-weight:normal;">(${countDone(tTasks)}/${tTasks.length})</span></div>`;
-        html += tTasks.length ? briefRows(tTasks, today) : '<div class="brief-empty">오늘 할 일이 없어요</div>';
+        // 📝 (그날) 할 일
+        html += `<div class="brief-sec-title">📝 ${isToday ? '오늘' : '이 날'} 할 일 <span style="color:#aaa; font-weight:normal;">(${countDone(tTasks)}/${tTasks.length})</span></div>`;
+        html += tTasks.length ? briefRows(tTasks, ref) : `<div class="brief-empty">${isToday ? '오늘' : '이 날'} 할 일이 없어요</div>`;
 
         document.getElementById('briefingBody').innerHTML = html;
     }
     function carryOverPrev() {
-        const prevDay = findPrevTaskDay();
-        const list = prevDay ? collectCarry(prevDay) : [];
+        const ref = briefingDate;
+        const prevDay = findPrevTaskDay(ref);
+        const list = prevDay ? collectCarry(prevDay, ref) : [];
         if (list.length === 0) { showToast('이월할 할 일이 없어요'); return; }
-        const today = getTodayStr();
         list.forEach(it => {
-            if (it.kind === 's') { const t = standaloneTasks.find(x => x.id === it.taskId); if (t) t.date = today; }
-            else { const p = projects.find(x => x.id === it.projectId); const t = p && (p.tasks || []).find(x => x.id === it.taskId); if (t) t.date = today; }
+            if (it.kind === 's') { const t = standaloneTasks.find(x => x.id === it.taskId); if (t) t.date = ref; }
+            else { const p = projects.find(x => x.id === it.projectId); const t = p && (p.tasks || []).find(x => x.id === it.taskId); if (t) t.date = ref; }
         });
         syncAll();
         renderBriefing();
-        showToast(`⏭️ ${list.length}개를 오늘로 가져왔어요`);
+        showToast(`⏭️ ${list.length}개를 가져왔어요`);
     }
     function buildBriefingText() {
-        const y = getYesterdayStr(), today = getTodayStr();
-        const prevDay = findPrevTaskDay();
+        const ref = briefingDate, y = addDaysStr(ref, -1), isToday = ref === getTodayStr();
+        const prevDay = findPrevTaskDay(ref);
         const pTasks = prevDay ? collectDayTasks(prevDay) : [];
-        const tTasks = collectDayTasks(today);
+        const tTasks = collectDayTasks(ref);
         const line = d => `- ${d.done ? '✅' : '⬜'} ${d.name}`;
-        let s = `📋 다했텅 브리핑 (${krLabel(today)})\n`;
+        let s = `📋 다했텅 브리핑 (${krLabel(ref)})\n`;
         if (routines.length) {
             s += `\n💚 루틴\n`;
-            s += routines.map(r => `- ${r.name} (어제 ${(r.checkHistory || []).includes(y) ? '✅' : '⬜'} · 오늘 ${(r.checkHistory || []).includes(today) ? '✅' : '⬜'})`).join('\n');
+            s += routines.map(r => `- ${r.name} (전날 ${(r.checkHistory || []).includes(y) ? '✅' : '⬜'} · 당일 ${(r.checkHistory || []).includes(ref) ? '✅' : '⬜'})`).join('\n');
         }
         s += `\n\n📅 직전 일정${prevDay ? ` (${krLabel(prevDay)}, ${countDone(pTasks)}/${pTasks.length})` : ''}\n`;
         s += pTasks.length ? pTasks.map(line).join('\n') : '- (없음)';
-        s += `\n\n📝 오늘 할 일 (${countDone(tTasks)}/${tTasks.length})\n`;
+        s += `\n\n📝 ${isToday ? '오늘' : '이 날'} 할 일 (${countDone(tTasks)}/${tTasks.length})\n`;
         s += tTasks.length ? tTasks.map(line).join('\n') : '- (없음)';
         return s;
     }
