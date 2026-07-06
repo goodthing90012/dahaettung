@@ -721,8 +721,8 @@
     // 특정 날짜의 할 일만 (루틴 제외) + 완료 여부
     function collectDayTasks(dateStr) {
         const items = [];
-        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done }); });
         projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done }); }));
+        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done }); });
         return items;
     }
     function briefRows(items, dateStr) {
