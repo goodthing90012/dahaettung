@@ -211,7 +211,7 @@
             <div id="calGrid"></div>
             <div class="legend">
                 <span><span class="lg-mark"><img src="char-allclear.png" style="height:18px; width:auto;"></span> 루틴 올클리어</span>
-                <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:var(--primary);display:inline-block;"></span></span> 일부 완료</span>
+                <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block;"></span></span> 일부 완료</span>
                 <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;"></span></span> 안 한 일 남음</span>
                 <span><span class="lg-mark"><span style="width:16px;height:4px;background:#4C6EF5;border-radius:2px;display:inline-block;"></span></span> 프로젝트 기간</span>
             </div>
@@ -602,7 +602,7 @@
 
             let mark = '';
             if (dayAllClear(dateStr)) mark = '<img class="cal-char" src="char-allclear.png" alt="올클리어">';
-            else if (dayHasAnyDone(dateStr)) mark = '<div class="cal-dot"></div>';
+            else if (dayHasAnyDone(dateStr)) mark = '<div class="cal-dot" style="background:#2563EB;"></div>';
             else if (hasIncomplete) mark = '<div class="cal-dot" style="background:var(--accent);"></div>';
 
             const dayProjects = projects.filter(p => projectActiveOn(p, dateStr)).slice(0, 3);
