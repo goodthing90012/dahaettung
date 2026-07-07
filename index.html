@@ -594,7 +594,8 @@
             if (dayAllClear(dateStr)) mark = '<img class="cal-char" src="char-allclear.png" alt="올클리어">';
             else if (dayHasAnyDone(dateStr)) mark = '<div class="cal-dot"></div>';
 
-            const hasStandalone = standaloneTasks.some(t => t.date === dateStr && !t.done);
+            const hasStandalone = standaloneTasks.some(t => t.date === dateStr && !t.done)
+                || projects.some(p => (p.tasks || []).some(t => t.date === dateStr && !t.done));
             const taskDot = hasStandalone ? '<div style="position:absolute; top:3px; right:4px; width:5px; height:5px; border-radius:50%; background:var(--accent);"></div>' : '';
 
             const dayProjects = projects.filter(p => projectActiveOn(p, dateStr)).slice(0, 3);
