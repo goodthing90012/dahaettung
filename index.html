@@ -135,7 +135,8 @@
         .mng-actions { display: flex; gap: 4px; flex-shrink: 0; }
         .icon-btn { background: #F1F1F1; border: none; border-radius: 8px; font-size: 11px; padding: 5px 8px; cursor: pointer; color: #555; font-weight: bold; }
         .icon-btn.del { background: #FFEBEB; color: var(--danger); }
-        .memo-chip { font-size: 11px; color: #666; background: #F6F6F6; border-radius: 8px; padding: 4px 8px; margin-top: 4px; display: flex; justify-content: space-between; gap: 6px; }
+        .memo-chip { font-size: 11px; color: #666; background: #F6F6F6; border-radius: 8px; padding: 4px 8px; margin-top: 4px; display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
+        .memo-chip .memo-text { flex: 1; white-space: pre-wrap; word-break: break-word; }
         .memo-add { background: none; border: 1px dashed #ddd; color: #aaa; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; margin-top: 4px; }
         .color-picker { display: flex; gap: 8px; margin-top: 4px; }
         .cycle-item { display: flex; align-items: center; gap: 4px; padding: 5px 4px; border-bottom: 1px solid #f4f4f4; font-size: 13px; }
@@ -780,12 +781,19 @@
     // 특정 날짜의 할 일만 (루틴 제외) + 완료 여부
     function collectDayTasks(dateStr) {
         const items = [];
-        projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done }); }));
-        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done }); });
+        projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done, memos: t.memos || [] }); }));
+        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done, memos: t.memos || [] }); });
         return items;
     }
     function briefRows(items, dateStr) {
-        return items.map(d => `<div class="brief-row" onclick="goToCheckDate('${dateStr}')"><span>${d.done ? '✅' : '⬜'}</span><span style="flex:1; ${d.done ? 'color:#aaa; text-decoration:line-through;' : ''}">${escapeHtml(d.name)}</span></div>`).join('');
+        return items.map(d => {
+            const memoHtml = (d.memos && d.memos.length)
+                ? `<div style="padding-left:24px; margin:-2px 0 4px;">` + d.memos.map(m =>
+                    `<div style="font-size:12px; color:#888; white-space:pre-wrap; word-break:break-word; padding:2px 0;">📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</div>`
+                  ).join('') + `</div>`
+                : '';
+            return `<div class="brief-row" onclick="goToCheckDate('${dateStr}')"><span>${d.done ? '✅' : '⬜'}</span><span style="flex:1; ${d.done ? 'color:#aaa; text-decoration:line-through;' : ''}">${escapeHtml(d.name)}</span></div>${memoHtml}`;
+        }).join('');
     }
     let briefingDate = getTodayStr();
     function openBriefing() { briefingDate = getTodayStr(); renderBriefing(); openOverlay('briefingOverlay'); }
@@ -855,7 +863,13 @@
         const prevDay = findPrevTaskDay(ref);
         const pTasks = prevDay ? collectDayTasks(prevDay) : [];
         const tTasks = collectDayTasks(ref);
-        const line = d => `- ${d.done ? '✅' : '⬜'} ${d.name}`;
+        const line = d => {
+            let out = `- ${d.done ? '✅' : '⬜'} ${d.name}`;
+            if (d.memos && d.memos.length) {
+                out += '\n' + d.memos.map(m => `    · ${m.text.replace(/\n/g, ' ')}`).join('\n');
+            }
+            return out;
+        };
         let s = `📋 다했텅 브리핑 (${krLabel(ref)})\n`;
         if (routines.length) {
             s += `\n💚 루틴\n`;
@@ -905,8 +919,8 @@
         const pid = projId === null ? 'null' : projId;
         return '<div style="padding-left:' + (projId===null?'34':'46') + 'px;">' + t.memos.map((m, idx) => `
             <div class="memo-chip">
-                <span>📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
-                <span style="color:var(--danger); cursor:pointer;" onclick="deleteTaskMemo(${pid},${t.id},${idx})">×</span>
+                <span class="memo-text">📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
+                <span style="color:var(--danger); cursor:pointer; flex-shrink:0;" onclick="confirmDeleteTaskMemo(${pid},${t.id},${idx})">×</span>
             </div>`).join('') + '</div>';
     }
 
@@ -1429,14 +1443,20 @@
         if (t && t.memos) t.memos.splice(idx, 1);
         syncAll();
     }
+    function confirmDeleteTaskMemo(projectId, taskId, idx) {
+        askConfirm('이 메모를 삭제할까요?', () => {
+            deleteTaskMemo(projectId, taskId, idx);
+            showToast('🗑️ 메모가 삭제됐어요');
+        });
+    }
 
     // ══════════ 메모 (루틴/프로젝트 공통) ══════════
     let memoTarget = null; // { kind, id, taskId? }
     function renderMemos(kind, id, memos) {
         let html = (memos || []).map((m, idx) => `
             <div class="memo-chip">
-                <span>📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
-                <span style="color:var(--danger); cursor:pointer;" onclick="deleteMemo('${kind}',${id},${idx})">×</span>
+                <span class="memo-text">📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
+                <span style="color:var(--danger); cursor:pointer; flex-shrink:0;" onclick="confirmDeleteMemo('${kind}',${id},${idx})">×</span>
             </div>`).join('');
         html += `<button class="memo-add" onclick="openMemo('${kind}',${id})">+ 메모</button>`;
         return html;
@@ -1473,6 +1493,12 @@
             : projects.find(x => x.id === id);
         if (holder && holder.memos) holder.memos.splice(idx, 1);
         syncAll();
+    }
+    function confirmDeleteMemo(kind, id, idx) {
+        askConfirm('이 메모를 삭제할까요?', () => {
+            deleteMemo(kind, id, idx);
+            showToast('🗑️ 메모가 삭제됐어요');
+        });
     }
 
     // ══════════ 백업 / 복원 ══════════
