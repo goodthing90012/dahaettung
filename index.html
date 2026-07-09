@@ -1366,7 +1366,11 @@
         editingTask = { projectId, taskId };
         document.getElementById('taskModalTitle').textContent = '할 일 수정';
         document.getElementById('taskName').value = t.name;
-        document.getElementById('taskDateGroup').style.display = 'none';
+        document.getElementById('taskDateGroup').style.display = 'block';
+        document.getElementById('taskModeRow').style.display = 'none'; // 수정은 하루 날짜만
+        document.getElementById('taskOneWrap').style.display = 'block';
+        document.getElementById('taskRangeWrap').style.display = 'none';
+        document.getElementById('taskDate').value = t.date;
         openOverlay('taskOverlay');
     }
     function saveTask() {
@@ -1375,6 +1379,18 @@
         if (editingTask) {
             const t = findTask(editingTask.projectId, editingTask.taskId); if (!t) return;
             t.name = name;
+            let date = document.getElementById('taskDate').value;
+            if (date) {
+                if (editingTask.projectId !== null && editingTask.projectId !== 'null') {
+                    const p = projects.find(x => x.id === editingTask.projectId);
+                    if (p) {
+                        if (date < p.startDate) date = p.startDate;
+                        if (date > p.endDate) date = p.endDate;
+                        if (document.getElementById('taskDate').value !== date) showToast('프로젝트 기간 안으로 조정됐어요');
+                    }
+                }
+                t.date = date;
+            }
             editingTask = null;
             closeOverlay('taskOverlay');
             syncAll();
