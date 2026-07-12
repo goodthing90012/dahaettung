@@ -78,10 +78,12 @@
         .brief-header-label { font-size: 13px; opacity: 0.95; font-weight: 700; }
         .brief-close { position: absolute; right: 0; top: 0; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255,255,255,0.22); color: #fff; font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .brief-close:active { background: rgba(255,255,255,0.4); }
-        .brief-datenav { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
+        .brief-datenav { position: relative; display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; }
         .brief-datenav button { background: rgba(255,255,255,0.18); border: none; color: #fff; font-size: 20px; width: 38px; height: 38px; border-radius: 10px; cursor: pointer; line-height: 1; }
         .brief-datenav button:active { background: rgba(255,255,255,0.32); }
-        .brief-datenav #briefingTitle { font-size: 17px; font-weight: 800; min-width: 170px; text-align: center; }
+        .brief-datenav #briefingTitle { font-size: 17px; font-weight: 800; min-width: 150px; text-align: center; }
+        .brief-today-btn { position: absolute; right: 0; background: rgba(255,255,255,0.28) !important; color: #fff; font-size: 12px !important; font-weight: bold; width: auto !important; padding: 0 10px !important; height: 38px; border-radius: 10px; flex-shrink: 0; }
+        .brief-today-btn:disabled { opacity: 0.4; }
         .brief-body { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
         .brief-card { background: var(--card); border-radius: 18px; padding: 16px 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.05); }
         .brief-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid #eee; display: flex; flex-direction: row; gap: 10px; }
@@ -110,7 +112,9 @@
         .legend .lg-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; }
 
         /* 체크 탭 날짜 네비 */
-        .date-nav { display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--card); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .date-nav { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--card); border-radius: 14px; padding: 8px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .today-btn { position: absolute; right: 8px; background: var(--primary-tint) !important; color: var(--primary-dark) !important; font-size: 12px !important; font-weight: bold; padding: 6px 10px !important; border-radius: 8px; flex-shrink: 0; }
+        .today-btn:disabled { opacity: 0.35; }
         .date-nav button { background: none; border: none; font-size: 20px; color: #555; cursor: pointer; padding: 2px 8px; }
         .date-nav .lbl { font-size: 14px; font-weight: bold; min-width: 150px; text-align: center; }
 
@@ -225,6 +229,7 @@
             <button onclick="changeCheckDate(-1)">‹</button>
             <div class="lbl" id="checkDateLabel"></div>
             <button onclick="changeCheckDate(1)" id="checkDateNext">›</button>
+            <button class="today-btn" id="checkTodayBtn" onclick="goCheckToday()">오늘</button>
         </div>
 
         <div class="card">
@@ -427,6 +432,7 @@
                 <button onclick="changeBriefingDate(-1)">‹</button>
                 <div id="briefingTitle"></div>
                 <button onclick="changeBriefingDate(1)">›</button>
+                <button class="brief-today-btn" id="briefTodayBtn" onclick="goBriefingToday()">오늘</button>
             </div>
         </div>
         <div class="brief-body">
@@ -798,10 +804,12 @@
     let briefingDate = getTodayStr();
     function openBriefing() { briefingDate = getTodayStr(); renderBriefing(); openOverlay('briefingOverlay'); }
     function changeBriefingDate(dir) { briefingDate = addDaysStr(briefingDate, dir); renderBriefing(); }
+    function goBriefingToday() { briefingDate = getTodayStr(); renderBriefing(); }
     function renderBriefing() {
         const ref = briefingDate, y = addDaysStr(ref, -1), isToday = ref === getTodayStr();
         const refPrefix = isToday ? '오늘 · ' : (ref > getTodayStr() ? '예정 · ' : '');
         document.getElementById('briefingTitle').textContent = `${refPrefix}${krLabel(ref)}`;
+        document.getElementById('briefTodayBtn').disabled = isToday;
         const prevDay = findPrevTaskDay(ref);
         const pTasks = prevDay ? collectDayTasks(prevDay) : [];
         const tTasks = collectDayTasks(ref);
@@ -902,6 +910,10 @@
         checkDateStr = addDaysStr(checkDateStr, dir);
         renderCheckTab();
     }
+    function goCheckToday() {
+        checkDateStr = getTodayStr();
+        renderCheckTab();
+    }
     function isCheckable(dateStr) { return dateStr <= getTodayStr(); }
 
     function taskRow(projLabel, projId, t) {
@@ -929,6 +941,7 @@
         const isFuture = checkDateStr > getTodayStr();
         document.getElementById('checkDateLabel').textContent = isToday ? `오늘 · ${krLabel(checkDateStr)}` : (isFuture ? `예정 · ${krLabel(checkDateStr)}` : krLabel(checkDateStr));
         document.getElementById('checkDateNext').style.visibility = 'visible';
+        document.getElementById('checkTodayBtn').disabled = isToday;
         document.getElementById('routineChecklistTitle').textContent = isToday ? '오늘의 루틴' : '이 날의 루틴';
         const editable = isCheckable(checkDateStr);
 
