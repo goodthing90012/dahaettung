@@ -152,9 +152,6 @@
         .memo-meta { font-size: 11px; color: var(--gray); margin-top: 6px; }
         .pv-stage { position: relative; width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; }
         .pv-stage img { max-width: 92%; max-height: 100%; border-radius: 10px; }
-        .pv-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; border: none; background: rgba(255,255,255,0.18); color: #fff; font-size: 24px; cursor: pointer; line-height: 1; }
-        .pv-nav.left { left: 8px; } .pv-nav.right { right: 8px; }
-        .pv-nav:active { background: rgba(255,255,255,0.35); }
         .pv-close { position: absolute; top: 14px; right: 14px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.2); color: #fff; font-size: 18px; cursor: pointer; z-index: 2; }
         .pv-counter { color: rgba(255,255,255,0.85); font-size: 13px; font-weight: bold; padding: 14px 0 20px; }
         .photo-thumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
@@ -532,9 +529,7 @@
 <div class="overlay" id="photoViewer" style="background:rgba(0,0,0,0.93); flex-direction:column;">
     <button class="pv-close" onclick="closeOverlay('photoViewer')">✕</button>
     <div class="pv-stage">
-        <button class="pv-nav left" id="pvPrev" onclick="movePhoto(-1)">‹</button>
         <img id="photoViewerImg">
-        <button class="pv-nav right" id="pvNext" onclick="movePhoto(1)">›</button>
     </div>
     <div class="pv-counter" id="pvCounter"></div>
 </div>
@@ -2228,8 +2223,6 @@
         const pid = viewerPhotos[viewerIndex];
         document.getElementById('photoViewerImg').src = photoCache[pid] || '';
         const multi = viewerPhotos.length > 1;
-        document.getElementById('pvPrev').style.display = multi ? 'block' : 'none';
-        document.getElementById('pvNext').style.display = multi ? 'block' : 'none';
         document.getElementById('pvCounter').textContent = multi ? `${viewerIndex + 1} / ${viewerPhotos.length}` : '';
     }
     function movePhoto(dir) {
@@ -2256,7 +2249,7 @@
             // 사진·버튼 위 탭은 유지, 바깥 여백만 닫기
             if (!moved) {
                 const el = document.elementFromPoint(t.clientX, t.clientY);
-                const onContent = el && (el.id === 'photoViewerImg' || el.closest('.pv-nav') || el.closest('.pv-close'));
+                const onContent = el && (el.id === 'photoViewerImg' || el.closest('.pv-close'));
                 if (!onContent) closeOverlay('photoViewer');
             }
         }, { passive: true });
