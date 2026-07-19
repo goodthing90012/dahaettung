@@ -150,6 +150,13 @@
         .memo-card { background: var(--card); border: 1px solid #f0f0f0; border-radius: 12px; padding: 12px; margin-bottom: 8px; }
         .memo-body { font-size: 13px; color: var(--text); white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
         .memo-meta { font-size: 11px; color: var(--gray); margin-top: 6px; }
+        .pv-stage { position: relative; width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; }
+        .pv-stage img { max-width: 92%; max-height: 100%; border-radius: 10px; }
+        .pv-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 42px; height: 42px; border-radius: 50%; border: none; background: rgba(255,255,255,0.18); color: #fff; font-size: 24px; cursor: pointer; line-height: 1; }
+        .pv-nav.left { left: 8px; } .pv-nav.right { right: 8px; }
+        .pv-nav:active { background: rgba(255,255,255,0.35); }
+        .pv-close { position: absolute; top: 14px; right: 14px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.2); color: #fff; font-size: 18px; cursor: pointer; z-index: 2; }
+        .pv-counter { color: rgba(255,255,255,0.85); font-size: 13px; font-weight: bold; padding: 14px 0 20px; }
         .photo-thumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
         .photo-thumb img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
         .photo-thumb .del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -159,6 +166,13 @@
         .memo-view-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
         .memo-view-photos img { width: calc(50% - 4px); border-radius: 10px; cursor: pointer; }
         .cnt { color: var(--gray); font-weight: normal; font-size: 12px; }
+        .photo-counter { color: #fff; font-size: 13px; font-weight: bold; margin-bottom: 10px; opacity: 0.9; }
+        .photo-stage { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; max-width: 560px; }
+        .photo-stage img { max-width: 88%; max-height: 74vh; border-radius: 10px; touch-action: pan-y; }
+        .photo-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: none; border-radius: 50%; background: rgba(255,255,255,0.22); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
+        .photo-nav.prev { left: 0; }
+        .photo-nav.next { right: 0; }
+        .photo-hint { color: rgba(255,255,255,0.55); font-size: 11px; margin-top: 14px; text-align: center; padding: 0 20px; }
         .memo-view-link { display: inline-block; background: var(--primary-tint); color: var(--primary-dark); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
         .photo-add-wrap { position: relative; width: 100%; height: 42px; }
         .photo-add-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px dashed #ccc; border-radius: 9px; color: #888; font-size: 13px; font-weight: bold; background: #fafafa; pointer-events: none; }
@@ -522,8 +536,14 @@
 </div>
 
 <!-- 사진 뷰어 -->
-<div class="overlay" id="photoViewer" onclick="closeOverlay('photoViewer')" style="background:rgba(0,0,0,0.9);">
-    <img id="photoViewerImg" style="max-width:96%; max-height:88%; border-radius:10px;">
+<div class="overlay" id="photoViewer" style="background:rgba(0,0,0,0.93); flex-direction:column;">
+    <button class="pv-close" onclick="closeOverlay('photoViewer')">✕</button>
+    <div class="pv-stage">
+        <button class="pv-nav left" id="pvPrev" onclick="movePhoto(-1)">‹</button>
+        <img id="photoViewerImg">
+        <button class="pv-nav right" id="pvNext" onclick="movePhoto(1)">›</button>
+    </div>
+    <div class="pv-counter" id="pvCounter"></div>
 </div>
 
 <!-- 메모 연결 모달 -->
@@ -2153,7 +2173,7 @@
             ? `<span class="memo-view-link">🔗 ${escapeHtml(memoLinkLabel(m))}</span>` : '';
         document.getElementById('memoViewText').textContent = m.text;
         document.getElementById('memoViewPhotos').innerHTML = (m.photos || [])
-            .map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">`).join('');
+            .map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}','${(m.photos || []).join(',')}')">`).join('');
         openOverlay('memoViewOverlay');
     }
     function linkMemoFromView() {
@@ -2200,14 +2220,49 @@
     function renderMemoPhotos() {
         document.getElementById('memoPhotoList').innerHTML = memoWorkingPhotos.map(pid => `
             <div class="photo-thumb">
-                <img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">
+                <img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}','${memoWorkingPhotos.join(',')}')">
                 <span class="del" onclick="removeMemoPhoto('${pid}')">✕</span>
             </div>`).join('');
     }
-    function openPhoto(pid) {
-        document.getElementById('photoViewerImg').src = photoCache[pid] || '';
+    let viewerPhotos = [], viewerIndex = 0;
+    function openPhoto(pid, listStr) {
+        viewerPhotos = listStr ? String(listStr).split(',').filter(Boolean) : [pid];
+        viewerIndex = Math.max(0, viewerPhotos.indexOf(pid));
+        renderPhotoViewer();
         openOverlay('photoViewer');
     }
+    function renderPhotoViewer() {
+        const pid = viewerPhotos[viewerIndex];
+        document.getElementById('photoViewerImg').src = photoCache[pid] || '';
+        const multi = viewerPhotos.length > 1;
+        document.getElementById('pvPrev').style.display = multi ? 'block' : 'none';
+        document.getElementById('pvNext').style.display = multi ? 'block' : 'none';
+        document.getElementById('pvCounter').textContent = multi ? `${viewerIndex + 1} / ${viewerPhotos.length}` : '';
+    }
+    function movePhoto(dir) {
+        if (viewerPhotos.length < 2) return;
+        viewerIndex = (viewerIndex + dir + viewerPhotos.length) % viewerPhotos.length;
+        renderPhotoViewer();
+    }
+    // 스와이프로 넘기기
+    (function initPhotoSwipe() {
+        const stage = document.getElementById('photoViewer');
+        if (!stage) return;
+        let startX = 0, startY = 0, moved = false;
+        stage.addEventListener('touchstart', e => {
+            const t = e.touches[0]; startX = t.clientX; startY = t.clientY; moved = false;
+        }, { passive: true });
+        stage.addEventListener('touchmove', e => {
+            const t = e.touches[0];
+            if (Math.abs(t.clientX - startX) > 12 || Math.abs(t.clientY - startY) > 12) moved = true;
+        }, { passive: true });
+        stage.addEventListener('touchend', e => {
+            const t = e.changedTouches[0];
+            const dx = t.clientX - startX, dy = t.clientY - startY;
+            if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { movePhoto(dx < 0 ? 1 : -1); return; }
+            if (!moved) closeOverlay('photoViewer'); // 그냥 탭하면 닫기
+        }, { passive: true });
+    })();
     function changeMemoMonth(dir) {
         memoCalMonth += dir;
         if (memoCalMonth < 0) { memoCalMonth = 11; memoCalYear--; }
@@ -2355,7 +2410,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                     <div style="flex:1; cursor:pointer;" onclick="openMemoView(${m.id})">
                         <div class="memo-body">${escapeHtml(m.text)}</div>
-                        ${(m.photos && m.photos.length) ? `<div class="memo-photos">${m.photos.map(pid => `<img src="${photoCache[pid] || ''}" onclick="event.stopPropagation(); openPhoto('${pid}')">`).join('')}</div>` : ''}
+                        ${(m.photos && m.photos.length) ? `<div class="memo-photos">${m.photos.map(pid => `<img src="${photoCache[pid] || ''}" onclick="event.stopPropagation(); openPhoto('${pid}','${m.photos.join(',')}')">`).join('')}</div>` : ''}
                         <div class="memo-meta">${m.date}${(m.photos && m.photos.length) ? ` · 📷 ${m.photos.length}` : ''}${m.link ? ` · 🔗 ${escapeHtml(memoLinkLabel(m))}` : ''}</div>
                     </div>
                     <div class="mng-actions" style="flex-direction:column; gap:4px;">
