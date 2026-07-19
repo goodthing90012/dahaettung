@@ -2477,8 +2477,14 @@
         document.getElementById(id).classList.add('active');
         lockBackgroundScroll(true);
     }
+    // 오버레이가 닫히는 순간 뒤 요소가 같은 터치를 받는 것(클릭 통과) 방지
+    let swallowClicksUntil = 0;
+    document.addEventListener('click', (e) => {
+        if (Date.now() < swallowClicksUntil) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
     function closeOverlay(id) {
         document.getElementById(id).classList.remove('active');
+        swallowClicksUntil = Date.now() + 350;
         // 남아있는 오버레이가 없을 때만 스크롤 해제
         if (!document.querySelector('.overlay.active')) lockBackgroundScroll(false);
     }
