@@ -681,14 +681,14 @@
         };
         standaloneTasks.forEach(t => {
             if (t.memos && t.memos.length) {
-                t.memos.forEach(m => push(m, { kind: 'standalone', taskId: t.id, name: t.name }));
+                t.memos.forEach(m => push({ text: m.text, date: m.date || t.date }, { kind: 'standalone', taskId: t.id, name: t.name }));
                 t.memos = [];
             }
         });
         projects.forEach(p => {
             (p.tasks || []).forEach(t => {
                 if (t.memos && t.memos.length) {
-                    t.memos.forEach(m => push(m, { kind: 'project', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }));
+                    t.memos.forEach(m => push({ text: m.text, date: m.date || t.date }, { kind: 'project', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }));
                     t.memos = [];
                 }
             });
@@ -2058,18 +2058,21 @@
     let memoWorkingPhotos = []; // 편집 중 사진 id 목록
     async function addMemoPhotos(files) {
         if (!files || !files.length) return;
+        const picked = Array.from(files); // 입력값을 비우기 전에 목록 보관
         showToast('사진을 처리하는 중…');
-        for (const f of files) {
+        let added = 0;
+        for (const f of picked) {
             try {
                 const dataUrl = await resizePhoto(f);
                 const pid = 'p' + Date.now() + Math.floor(Math.random() * 10000);
                 await photoPut(pid, dataUrl);
                 memoWorkingPhotos.push(pid);
+                added++;
             } catch (e) { console.error(e); showToast('⚠️ 사진을 불러오지 못했어요'); }
         }
         document.getElementById('memoPhotoInput').value = '';
         renderMemoPhotos();
-        showToast(`📷 사진 ${files.length}장 추가됐어요`);
+        if (added) showToast(`📷 사진 ${added}장 추가됐어요`);
     }
     function removeMemoPhoto(pid) {
         memoWorkingPhotos = memoWorkingPhotos.filter(x => x !== pid);
