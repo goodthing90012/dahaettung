@@ -2227,7 +2227,7 @@
         if (memoStore.length === 0) { el.innerHTML = '<div class="empty">작성된 메모가 없어요</div>'; return; }
         const q = (document.getElementById('memoSearch')?.value || '').trim().toLowerCase();
         const list = memoStore.filter(m => !q || m.text.toLowerCase().includes(q) || memoLinkLabel(m).toLowerCase().includes(q))
-            .slice().sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+            .slice().sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')) || b.id - a.id);
         if (list.length === 0) { el.innerHTML = '<div class="empty">검색 결과가 없어요</div>'; return; }
         el.innerHTML = `<div style="font-size:11px; color:var(--gray); margin-bottom:6px;">${q ? `검색 ${list.length}개` : `전체 ${list.length}개`}</div>` +
             list.map(m => `
