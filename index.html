@@ -147,6 +147,14 @@
         .cycle-item.cur { background: var(--primary-tint); border-radius: 8px; }
         .dow-chip { flex: 1; padding: 7px 0; border: 1px solid #ddd; background: #fff; color: #bbb; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; }
         .dow-chip.on { background: var(--primary-tint); border-color: var(--primary); color: var(--primary-dark); }
+        .exc-chip { display: inline-flex; align-items: center; gap: 5px; background: #FFF1EC; border: 1px solid #FBDDD0; color: #B4552E; border-radius: 8px; padding: 4px 8px; font-size: 11px; font-weight: bold; }
+        .exc-cell { padding: 9px 0; border-radius: 9px; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+        .exc-cell.today { border-color: var(--primary); color: var(--primary-dark); font-weight: bold; }
+        .exc-cell.sel { background: var(--accent); color: #fff; font-weight: bold; border-color: var(--accent); }
+        .exc-cell.picked { background: var(--primary); color: #fff; font-weight: bold; border-color: var(--primary); }
+        .exc-cell.range-edge { background: var(--primary); color: #fff; font-weight: bold; border-color: var(--primary); }
+        .exc-cell.range-mid { background: var(--primary-tint); color: var(--primary-dark); }
+        .exc-cell.disabled { color: #ddd; }
         .seg-btn { flex: 1; padding: 8px; border: 1px solid #ddd; background: #fff; border-radius: 9px; font-size: 13px; font-weight: bold; color: #888; cursor: pointer; }
         .seg-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
         .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; }
@@ -340,11 +348,14 @@
             <input type="text" id="projEmoji" maxlength="2" placeholder="📁" style="width:52px; text-align:center; flex:0 0 52px;">
             <input type="text" id="projName" placeholder="이름 (예: 이사 준비, 여행)" style="flex:1;">
         </div>
-        <label class="fld">기간</label>
-        <div class="form-row">
-            <input type="date" id="projStart">
-            <input type="date" id="projEnd">
+        <label class="fld">기간 (시작일 → 종료일 순서로 눌러주세요)</label>
+        <div class="cal-head" style="margin-bottom:6px;">
+            <button class="cal-nav-btn" onclick="changeProjMonth(-1)">‹</button>
+            <div class="cal-month" id="projMonthLabel"></div>
+            <button class="cal-nav-btn" onclick="changeProjMonth(1)">›</button>
         </div>
+        <div id="projCalGrid"></div>
+        <div id="projRangeLabel" style="font-size:11px; color:var(--gray); text-align:center; margin:8px 0;"></div>
         <label class="fld">색상</label>
         <div class="color-picker" id="projColorPicker"></div>
         <div class="modal-btn-row">
@@ -360,28 +371,40 @@
         <h3 id="taskModalTitle">할 일 추가</h3>
         <input type="text" id="taskName" placeholder="할 일 내용" style="margin-bottom:6px;">
         <div id="taskDateGroup">
-            <div id="taskModeRow" style="display:flex; gap:6px; margin-bottom:8px;">
-                <button type="button" id="taskModeOne" class="seg-btn active" onclick="setTaskMode('one')">하루</button>
-                <button type="button" id="taskModeRange" class="seg-btn" onclick="setTaskMode('range')">기간</button>
+            <div id="taskProjectRangeBtnWrap" style="display:none; margin-bottom:6px;">
+                <button type="button" class="btn btn-ghost btn-sm" style="width:100%;" onclick="fillProjectRange()">📁 프로젝트 기간 전체 선택</button>
             </div>
-            <div id="taskOneWrap">
-                <label class="fld">날짜</label>
-                <input type="date" id="taskDate">
+            <label class="fld" id="taskDateHint">날짜 (여러 날 선택 가능)</label>
+            <div class="cal-head" style="margin-bottom:6px;">
+                <button class="cal-nav-btn" onclick="changeTaskMonth(-1)">‹</button>
+                <div class="cal-month" id="taskMonthLabel"></div>
+                <button class="cal-nav-btn" onclick="changeTaskMonth(1)">›</button>
             </div>
-            <div id="taskRangeWrap" style="display:none;">
-                <div id="taskProjectRangeBtnWrap" style="display:none; margin-bottom:6px;">
-                    <button type="button" class="btn btn-ghost btn-sm" style="width:100%;" onclick="fillProjectRange()">📁 프로젝트 기간 전체로</button>
-                </div>
-                <label class="fld">시작일</label>
-                <input type="date" id="taskStartDate" style="margin-bottom:6px;">
-                <label class="fld">종료일</label>
-                <input type="date" id="taskEndDate">
-                <div id="taskRangeHint" style="font-size:11px; color:#999; margin-top:6px;"></div>
-            </div>
+            <div id="taskCalGrid"></div>
+            <div id="taskSelLabel" style="font-size:11px; color:var(--gray); text-align:center; margin:8px 0;"></div>
         </div>
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('taskOverlay')">취소</button>
             <button class="modal-btn yes" onclick="saveTask()">추가</button>
+        </div>
+    </div>
+</div>
+
+<!-- 순환 루틴 제외 날짜 모달 -->
+<div class="overlay" id="excludeOverlay">
+    <div class="modal">
+        <h3>제외 날짜 선택</h3>
+        <p style="font-size:11px; color:#999; margin:0 0 10px; line-height:1.5;">날짜를 눌러 선택/해제하고, 저장을 누르면 한 번에 적용돼요.</p>
+        <div class="cal-head">
+            <button class="cal-nav-btn" onclick="changeExcMonth(-1)">‹</button>
+            <div class="cal-month" id="excMonthLabel"></div>
+            <button class="cal-nav-btn" onclick="changeExcMonth(1)">›</button>
+        </div>
+        <div id="excCalGrid"></div>
+        <div id="excSelCount" style="font-size:11px; color:var(--gray); text-align:center; margin-top:8px;"></div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('excludeOverlay')">취소</button>
+            <button class="modal-btn yes" onclick="saveExcludeDates()">저장</button>
         </div>
     </div>
 </div>
@@ -724,6 +747,7 @@
     }
     // 순환 루틴: 그 요일에 활성인지 (activeDays 없으면 매일 활성)
     function cycleActiveOnDay(cr, dateStr) {
+        if (cr.excludeDates && cr.excludeDates.includes(dateStr)) return false;
         if (!cr.activeDays) return true;
         const dow = new Date(parseDate(dateStr)).getDay();
         return cr.activeDays[dow] !== false;
@@ -1167,6 +1191,71 @@
         }
         syncAll();
     }
+    // ── 순환 루틴 제외 날짜 ──
+    function renderExcludeChips(cr) {
+        const today = getTodayStr();
+        // 지나간 날짜는 숨김 (데이터는 유지)
+        const upcoming = (cr.excludeDates || []).filter(d => d >= today).sort();
+        if (upcoming.length === 0) return '<div style="font-size:11px; color:#bbb; padding:2px 0 4px;">예정된 제외 날짜가 없어요</div>';
+        const shown = upcoming.slice(0, 8);
+        let html = '<div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px;">';
+        html += shown.map(d => `<span class="exc-chip">${d.slice(5).replace('-', '/')}<span onclick="removeExcludeDate(${cr.id},'${d}')" style="cursor:pointer; color:var(--danger); font-weight:bold;">✕</span></span>`).join('');
+        if (upcoming.length > shown.length) html += `<span class="exc-chip" style="color:#999;">+${upcoming.length - shown.length}일</span>`;
+        html += '</div>';
+        return html;
+    }
+    function removeExcludeDate(id, dateStr) {
+        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
+        cr.excludeDates = (cr.excludeDates || []).filter(d => d !== dateStr);
+        syncAll();
+    }
+    let excludeTargetId = null, excWorking = [], excCalYear = 0, excCalMonth = 0;
+    function openExcludeModal(id) {
+        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
+        excludeTargetId = id;
+        excWorking = (cr.excludeDates || []).slice(); // 작업용 복사본
+        const now = new Date();
+        excCalYear = now.getFullYear(); excCalMonth = now.getMonth();
+        renderExcludeCalendar();
+        openOverlay('excludeOverlay');
+    }
+    function changeExcMonth(dir) {
+        excCalMonth += dir;
+        if (excCalMonth < 0) { excCalMonth = 11; excCalYear--; }
+        if (excCalMonth > 11) { excCalMonth = 0; excCalYear++; }
+        renderExcludeCalendar();
+    }
+    function toggleExcDate(dateStr) {
+        const i = excWorking.indexOf(dateStr);
+        if (i >= 0) excWorking.splice(i, 1); else excWorking.push(dateStr);
+        renderExcludeCalendar();
+    }
+    function renderExcludeCalendar() {
+        document.getElementById('excMonthLabel').textContent = `${excCalYear}년 ${excCalMonth + 1}월`;
+        const firstDay = new Date(excCalYear, excCalMonth, 1).getDay();
+        const daysInMonth = new Date(excCalYear, excCalMonth + 1, 0).getDate();
+        const todayStr = getTodayStr();
+        let html = '<div class="cal-grid">';
+        ['일','월','화','수','목','금','토'].forEach(d => html += `<div class="cal-dow">${d}</div>`);
+        for (let i = 0; i < firstDay; i++) html += '<div></div>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${excCalYear}-${String(excCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const sel = excWorking.includes(dateStr);
+            const isToday = dateStr === todayStr;
+            html += `<div class="exc-cell ${sel?'sel':''} ${isToday?'today':''}" onclick="toggleExcDate('${dateStr}')">${d}</div>`;
+        }
+        html += '</div>';
+        document.getElementById('excCalGrid').innerHTML = html;
+        const upcoming = excWorking.filter(x => x >= todayStr).length;
+        document.getElementById('excSelCount').textContent = `선택된 제외 날짜 ${excWorking.length}일 (예정 ${upcoming}일)`;
+    }
+    function saveExcludeDates() {
+        const cr = cycleRoutines.find(x => x.id === excludeTargetId); if (!cr) return;
+        cr.excludeDates = excWorking.slice().sort();
+        closeOverlay('excludeOverlay');
+        syncAll();
+        showToast(`✅ 제외 날짜 ${cr.excludeDates.length}일이 저장됐어요`);
+    }
     function toggleCycleDay(id, dow) {
         const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
         if (!cr.activeDays) cr.activeDays = {0:true,1:true,2:true,3:true,4:true,5:true,6:true};
@@ -1207,6 +1296,11 @@
                             return `<button class="dow-chip ${on?'on':''}" onclick="toggleCycleDay(${cr.id},${d})">${DOW_LABELS[d]}</button>`;
                         }).join('')}
                     </div>
+                </div>
+                <div style="margin-top:8px;">
+                    <div style="font-size:11px; color:var(--gray); font-weight:bold; margin-bottom:4px;">제외 날짜 (연차·휴일 등)</div>
+                    ${renderExcludeChips(cr)}
+                    <button class="memo-add" style="width:100%;" onclick="openExcludeModal(${cr.id})">+ 제외 날짜 선택</button>
                 </div>
             </div>`;
         }).join('');
@@ -1280,13 +1374,14 @@
             `<div class="color-swatch ${c===pickedColor?'sel':''}" style="background:${c};" onclick="pickColor('${c}')"></div>`).join('');
     }
     function pickColor(c) { pickedColor = c; renderColorPicker(); }
+    let projPickStart = null, projPickEnd = null, projCalYear = 0, projCalMonth = 0;
     function openProjectModal() {
         editingProjectId = null; pickedColor = PROJECT_COLORS[0];
         document.getElementById('projectModalTitle').textContent = '새 프로젝트 / 일정';
         document.getElementById('projEmoji').value = '';
         document.getElementById('projName').value = '';
-        document.getElementById('projStart').value = getTodayStr();
-        document.getElementById('projEnd').value = getTodayStr();
+        projPickStart = getTodayStr(); projPickEnd = getTodayStr();
+        initProjCal(projPickStart);
         renderColorPicker();
         openOverlay('projectOverlay');
     }
@@ -1296,18 +1391,71 @@
         document.getElementById('projectModalTitle').textContent = '프로젝트 / 일정 수정';
         document.getElementById('projEmoji').value = p.emoji;
         document.getElementById('projName').value = p.name;
-        document.getElementById('projStart').value = p.startDate;
-        document.getElementById('projEnd').value = p.endDate;
+        projPickStart = p.startDate; projPickEnd = p.endDate;
+        initProjCal(projPickStart);
         renderColorPicker();
         openOverlay('projectOverlay');
+    }
+    function initProjCal(dateStr) {
+        const d = new Date(parseDate(dateStr));
+        projCalYear = d.getFullYear(); projCalMonth = d.getMonth();
+        renderProjCal();
+    }
+    function changeProjMonth(dir) {
+        projCalMonth += dir;
+        if (projCalMonth < 0) { projCalMonth = 11; projCalYear--; }
+        if (projCalMonth > 11) { projCalMonth = 0; projCalYear++; }
+        renderProjCal();
+    }
+    function pickProjDate(dateStr) {
+        if (!projPickStart || (projPickStart && projPickEnd)) {
+            // 새로 시작
+            projPickStart = dateStr; projPickEnd = null;
+        } else if (dateStr < projPickStart) {
+            projPickStart = dateStr;
+        } else {
+            projPickEnd = dateStr;
+        }
+        renderProjCal();
+    }
+    function renderProjCal() {
+        document.getElementById('projMonthLabel').textContent = `${projCalYear}년 ${projCalMonth + 1}월`;
+        const firstDay = new Date(projCalYear, projCalMonth, 1).getDay();
+        const daysInMonth = new Date(projCalYear, projCalMonth + 1, 0).getDate();
+        const todayStr = getTodayStr();
+        let html = '<div class="cal-grid">';
+        ['일','월','화','수','목','금','토'].forEach(d => html += `<div class="cal-dow">${d}</div>`);
+        for (let i = 0; i < firstDay; i++) html += '<div></div>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${projCalYear}-${String(projCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const isStart = dateStr === projPickStart;
+            const isEnd = dateStr === projPickEnd;
+            const inRange = projPickStart && projPickEnd && dateStr > projPickStart && dateStr < projPickEnd;
+            const cls = ['exc-cell'];
+            if (isStart || isEnd) cls.push('range-edge');
+            else if (inRange) cls.push('range-mid');
+            if (dateStr === todayStr) cls.push('today');
+            html += `<div class="${cls.join(' ')}" onclick="pickProjDate('${dateStr}')">${d}</div>`;
+        }
+        html += '</div>';
+        document.getElementById('projCalGrid').innerHTML = html;
+        const lbl = document.getElementById('projRangeLabel');
+        if (projPickStart && projPickEnd) {
+            const days = Math.round((parseDate(projPickEnd) - parseDate(projPickStart)) / 86400000) + 1;
+            lbl.textContent = `${projPickStart} ~ ${projPickEnd} (${days}일)`;
+        } else if (projPickStart) {
+            lbl.textContent = `시작 ${projPickStart} · 종료일을 눌러주세요`;
+        } else {
+            lbl.textContent = '시작일을 눌러주세요';
+        }
     }
     function saveProject() {
         const name = document.getElementById('projName').value.trim();
         const emoji = document.getElementById('projEmoji').value.trim() || '📁';
-        let start = document.getElementById('projStart').value;
-        let end = document.getElementById('projEnd').value;
+        let start = projPickStart;
+        let end = projPickEnd || projPickStart; // 하루짜리 허용
         if (!name) { showToast('이름을 입력해 주세요'); return; }
-        if (!start || !end) { showToast('기간을 선택해 주세요'); return; }
+        if (!start) { showToast('기간을 선택해 주세요'); return; }
         if (start > end) { const t = start; start = end; end = t; }
         if (editingProjectId) {
             const p = projects.find(x => x.id === editingProjectId);
@@ -1359,68 +1507,103 @@
         p.tasks = p.tasks || [];
         return p.tasks;
     }
+    let taskCalYear = 0, taskCalMonth = 0, taskPickedDates = [];
     function openTaskModal(projectId) {
         taskProjectId = projectId; // null = 단독
         editingTask = null;
         const p = (projectId === null) ? null : projects.find(x => x.id === projectId);
         document.getElementById('taskModalTitle').textContent = p ? `${p.name} · 할 일 추가` : '단독 할 일 추가';
         document.getElementById('taskName').value = '';
-        document.getElementById('taskDate').value = checkDateStr;
-        document.getElementById('taskStartDate').value = p ? p.startDate : checkDateStr;
-        document.getElementById('taskEndDate').value = p ? p.endDate : checkDateStr;
         document.getElementById('taskDateGroup').style.display = 'block';
-        document.getElementById('taskModeRow').style.display = 'flex';
-        // 프로젝트 기간 전체 버튼은 프로젝트 할 일일 때만
         document.getElementById('taskProjectRangeBtnWrap').style.display = p ? 'block' : 'none';
-        setTaskMode('one');
+        document.getElementById('taskDateHint').textContent = p
+            ? `날짜 (프로젝트 기간 ${p.startDate} ~ ${p.endDate} 안에서 선택)`
+            : '날짜 (여러 날 선택 가능)';
+        taskPickedDates = [checkDateStr];
+        const base = new Date(parseDate(checkDateStr));
+        taskCalYear = base.getFullYear(); taskCalMonth = base.getMonth();
+        renderTaskCal();
         openOverlay('taskOverlay');
     }
-    function setTaskMode(mode) {
-        taskMode = mode;
-        document.getElementById('taskModeOne').classList.toggle('active', mode === 'one');
-        document.getElementById('taskModeRange').classList.toggle('active', mode === 'range');
-        document.getElementById('taskOneWrap').style.display = mode === 'one' ? 'block' : 'none';
-        document.getElementById('taskRangeWrap').style.display = mode === 'range' ? 'block' : 'none';
-        updateRangeHint();
+    function changeTaskMonth(dir) {
+        taskCalMonth += dir;
+        if (taskCalMonth < 0) { taskCalMonth = 11; taskCalYear--; }
+        if (taskCalMonth > 11) { taskCalMonth = 0; taskCalYear++; }
+        renderTaskCal();
+    }
+    function toggleTaskDate(dateStr) {
+        const p = (taskProjectId === null) ? null : projects.find(x => x.id === taskProjectId);
+        if (p && (dateStr < p.startDate || dateStr > p.endDate)) {
+            showToast('프로젝트 기간 밖이에요'); return;
+        }
+        const i = taskPickedDates.indexOf(dateStr);
+        if (i >= 0) taskPickedDates.splice(i, 1); else taskPickedDates.push(dateStr);
+        renderTaskCal();
     }
     function fillProjectRange() {
         const p = projects.find(x => x.id === taskProjectId); if (!p) return;
-        document.getElementById('taskStartDate').value = p.startDate;
-        document.getElementById('taskEndDate').value = p.endDate;
-        updateRangeHint();
+        taskPickedDates = [];
+        let c = 0;
+        for (let d = p.startDate; d <= p.endDate; d = addDaysStr(d, 1)) {
+            taskPickedDates.push(d); c++;
+            if (c > 366) break;
+        }
+        renderTaskCal();
     }
-    function updateRangeHint() {
-        const hintEl = document.getElementById('taskRangeHint'); if (!hintEl) return;
+    function renderTaskCal() {
+        document.getElementById('taskMonthLabel').textContent = `${taskCalYear}년 ${taskCalMonth + 1}월`;
+        const firstDay = new Date(taskCalYear, taskCalMonth, 1).getDay();
+        const daysInMonth = new Date(taskCalYear, taskCalMonth + 1, 0).getDate();
+        const todayStr = getTodayStr();
         const p = (taskProjectId === null) ? null : projects.find(x => x.id === taskProjectId);
-        hintEl.textContent = p ? `※ 프로젝트 기간(${p.startDate} ~ ${p.endDate})을 벗어난 날짜는 자동 제외돼요` : '';
+        let html = '<div class="cal-grid">';
+        ['일','월','화','수','목','금','토'].forEach(d => html += `<div class="cal-dow">${d}</div>`);
+        for (let i = 0; i < firstDay; i++) html += '<div></div>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${taskCalYear}-${String(taskCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const sel = taskPickedDates.includes(dateStr);
+            const outside = p && (dateStr < p.startDate || dateStr > p.endDate);
+            const cls = ['exc-cell'];
+            if (sel) cls.push('picked');
+            if (dateStr === todayStr) cls.push('today');
+            if (outside) cls.push('disabled');
+            html += `<div class="${cls.join(' ')}" onclick="toggleTaskDate('${dateStr}')">${d}</div>`;
+        }
+        html += '</div>';
+        document.getElementById('taskCalGrid').innerHTML = html;
+        document.getElementById('taskSelLabel').textContent = taskPickedDates.length
+            ? `선택 ${taskPickedDates.length}일` : '날짜를 선택해 주세요';
     }
     function editTask(projectId, taskId) {
         const t = findTask(projectId, taskId); if (!t) return;
         editingTask = { projectId, taskId };
+        taskProjectId = projectId;
         document.getElementById('taskModalTitle').textContent = '할 일 수정';
         document.getElementById('taskName').value = t.name;
         document.getElementById('taskDateGroup').style.display = 'block';
-        document.getElementById('taskModeRow').style.display = 'none'; // 수정은 하루 날짜만
-        document.getElementById('taskOneWrap').style.display = 'block';
-        document.getElementById('taskRangeWrap').style.display = 'none';
-        document.getElementById('taskDate').value = t.date;
+        document.getElementById('taskProjectRangeBtnWrap').style.display = 'none';
+        document.getElementById('taskDateHint').textContent = '날짜 (하나만 선택해 이동)';
+        taskPickedDates = [t.date];
+        const base = new Date(parseDate(t.date));
+        taskCalYear = base.getFullYear(); taskCalMonth = base.getMonth();
+        renderTaskCal();
         openOverlay('taskOverlay');
     }
     function saveTask() {
         const name = document.getElementById('taskName').value.trim();
         if (!name) { showToast('할 일 내용을 입력해 주세요'); return; }
+
         if (editingTask) {
             const t = findTask(editingTask.projectId, editingTask.taskId); if (!t) return;
             t.name = name;
-            let date = document.getElementById('taskDate').value;
-            if (date) {
-                if (editingTask.projectId !== null && editingTask.projectId !== 'null') {
-                    const p = projects.find(x => x.id === editingTask.projectId);
-                    if (p) {
-                        if (date < p.startDate) date = p.startDate;
-                        if (date > p.endDate) date = p.endDate;
-                        if (document.getElementById('taskDate').value !== date) showToast('프로젝트 기간 안으로 조정됐어요');
-                    }
+            if (taskPickedDates.length) {
+                // 수정은 마지막으로 고른 날짜 하나로 이동
+                let date = taskPickedDates[taskPickedDates.length - 1];
+                const p = (editingTask.projectId === null || editingTask.projectId === 'null')
+                    ? null : projects.find(x => x.id === editingTask.projectId);
+                if (p) {
+                    if (date < p.startDate) date = p.startDate;
+                    if (date > p.endDate) date = p.endDate;
                 }
                 t.date = date;
             }
@@ -1430,38 +1613,14 @@
             showToast('✅ 할 일이 수정됐어요');
             return;
         }
+
         const list = getTaskList(taskProjectId); if (!list) return;
-
-        if (taskMode === 'range') {
-            let start = document.getElementById('taskStartDate').value;
-            let end = document.getElementById('taskEndDate').value;
-            if (!start || !end) { showToast('시작일과 종료일을 선택해 주세요'); return; }
-            if (start > end) { const tmp = start; start = end; end = tmp; }
-            // 프로젝트 할 일이면 프로젝트 기간으로 클램프
-            const p = (taskProjectId === null) ? null : projects.find(x => x.id === taskProjectId);
-            if (p) {
-                if (start < p.startDate) start = p.startDate;
-                if (end > p.endDate) end = p.endDate;
-                if (start > end) { showToast('프로젝트 기간과 겹치는 날짜가 없어요'); return; }
-            }
-            let count = 0;
-            for (let d = start; d <= end; d = addDaysStr(d, 1)) {
-                list.push({ id: Date.now() + count, date: d, name, done: false, memos: [] });
-                count++;
-                if (count > 366) break; // 안전장치
-            }
-            closeOverlay('taskOverlay');
-            syncAll();
-            showToast(`✅ ${count}일에 일괄 등록됐어요`);
-            return;
-        }
-
-        const date = document.getElementById('taskDate').value;
-        if (!date) { showToast('날짜를 선택해 주세요'); return; }
-        list.push({ id: Date.now(), date, name, done: false, memos: [] });
+        if (taskPickedDates.length === 0) { showToast('날짜를 선택해 주세요'); return; }
+        const dates = taskPickedDates.slice().sort();
+        dates.forEach((d, i) => list.push({ id: Date.now() + i, date: d, name, done: false, memos: [] }));
         closeOverlay('taskOverlay');
         syncAll();
-        showToast('✅ 할 일이 추가됐어요');
+        showToast(dates.length > 1 ? `✅ ${dates.length}일에 등록됐어요` : '✅ 할 일이 추가됐어요');
     }
     function toggleTask(projectId, taskId) {
         const list = getTaskList(projectId); if (!list) return;
