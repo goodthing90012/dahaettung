@@ -1118,7 +1118,7 @@
         const prevDay = findPrevTaskDay(ref);
         const pTasks = prevDay ? collectDayTasks(prevDay) : [];
         const tTasks = collectDayTasks(ref);
-        const carry = prevDay ? collectCarry(prevDay, ref) : [];
+        const carry = (prevDay && ref <= getTodayStr()) ? collectCarry(prevDay, ref) : [];
         let html = '';
 
         // 💚 루틴 (전날·기준일 상태 나란히)
@@ -1152,10 +1152,9 @@
         html += `<div class="brief-sec-title">📅 직전 일정${prevLabel}</div>`;
         html += pTasks.length ? briefRows(pTasks, prevDay) : '<div class="brief-empty">이전 일정이 없어요</div>';
         if (carry.length) {
-            const isFutureRef = ref > getTodayStr();
             html += `<div class="brief-carry">
                 <span onclick="toggleCarryDetail()" style="cursor:pointer; flex:1;">⏭️ 못 끝낸 할 일 ${carry.length}개 <span style="color:#B4552E;">${showCarryDetail ? '▾' : '▸'}</span></span>
-                ${isFutureRef ? '' : `<button onclick="carryOverPrev()">${isToday ? '오늘로' : '이 날로'} 가져오기</button>`}
+                <button onclick="carryOverPrev()">${isToday ? '오늘로' : '이 날로'} 가져오기</button>
             </div>`;
             if (showCarryDetail) {
                 html += '<div class="carry-detail">' + carry.map(it => {
