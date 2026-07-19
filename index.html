@@ -455,6 +455,7 @@
     const getTodayStr = () => formatDateString(getTodayTimeline());
     const addDaysStr = (dateStr, n) => formatDateString(parseDate(dateStr) + n*86400000);
     const DOW_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
+    const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 표시 순서: 월~일
     const krLabel = (dateStr) => { const d = new Date(parseDate(dateStr)); const w=['일','월','화','수','목','금','토'][d.getDay()]; return `${d.getMonth()+1}월 ${d.getDate()}일 (${w})`; };
 
     // ══════════ 저장소 ══════════
@@ -1099,7 +1100,6 @@
                 <div class="mng-info">
                     <div class="mng-name"><span class="check-emoji">${r.emoji||'💚'}</span> ${escapeHtml(r.name)}</div>
                     <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료</div>
-                    ${renderMemos('routine', r.id, r.memos)}
                 </div>
                 <div class="mng-actions">
                     <button class="icon-btn" onclick="editRoutine(${r.id})">수정</button>
@@ -1202,13 +1202,12 @@
                 <div style="margin-top:6px;">
                     <div style="font-size:11px; color:var(--gray); font-weight:bold; margin-bottom:4px;">적용 요일 (끄면 그날은 안 떠요)</div>
                     <div style="display:flex; gap:4px;">
-                        ${[0,1,2,3,4,5,6].map(d => {
+                        ${DOW_ORDER.map(d => {
                             const on = !cr.activeDays || cr.activeDays[d] !== false;
                             return `<button class="dow-chip ${on?'on':''}" onclick="toggleCycleDay(${cr.id},${d})">${DOW_LABELS[d]}</button>`;
                         }).join('')}
                     </div>
                 </div>
-                ${renderMemos('cycle', cr.id, cr.memos)}
             </div>`;
         }).join('');
     }
@@ -1242,7 +1241,7 @@
         const el = document.getElementById('weekdayMngList');
         if (weekdayRoutines.length === 0) { el.innerHTML = '<div class="empty">등록된 요일 루틴이 없어요</div>'; return; }
         el.innerHTML = weekdayRoutines.map(wr => {
-            const rows = [0,1,2,3,4,5,6].map(d => `
+            const rows = DOW_ORDER.map(d => `
                 <div style="display:flex; align-items:center; gap:8px; padding:3px 0;">
                     <span style="width:20px; text-align:center; font-weight:bold; color:${d===0?'#E64980':d===6?'#4C6EF5':'#555'};">${DOW_LABELS[d]}</span>
                     <input type="text" value="${escapeHtml((wr.byDay && wr.byDay[d]) || '')}" placeholder="쉬는 날" onchange="setWeekdayItem(${wr.id},${d},this.value)" style="flex:1; padding:6px 8px; font-size:13px;">
@@ -1257,7 +1256,6 @@
                     </div>
                 </div>
                 <div style="margin-top:2px;">${rows}</div>
-                ${renderMemos('weekday', wr.id, wr.memos)}
             </div>`;
         }).join('');
     }
@@ -1340,7 +1338,6 @@
                 <div class="mng-info">
                     <div class="mng-name"><span class="proj-color-dot" style="background:${p.color};"></span> <span class="check-emoji">${p.emoji||'📁'}</span> ${escapeHtml(p.name)}</div>
                     <div class="mng-sub">${single ? krLabel(p.startDate) : `${p.startDate} ~ ${p.endDate}`} · 할 일 ${pg.done}/${pg.total} 완료</div>
-                    ${renderMemos('project', p.id, p.memos)}
                 </div>
                 <div class="mng-actions">
                     <button class="icon-btn" onclick="editProject(${p.id})">수정</button>
