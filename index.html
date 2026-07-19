@@ -899,6 +899,10 @@
         const listEl = document.getElementById('dateDetailList');
         let rows = '';
 
+        const rcD = routineDayStatus(dateStr);
+        if (rcD.total > 0) {
+            rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>💚</span><span style="flex:1;">루틴</span><span style="font-size:11px; color:#aaa;">${rcD.done}/${rcD.total}</span></div>`;
+        }
         routines.forEach(r => {
             const done = (r.checkHistory || []).includes(dateStr);
             if (!routineActiveOnDay(r, dateStr) && !done) return;
@@ -949,7 +953,7 @@
             });
         });
         if (dayStandalone.length) {
-            rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📝</span><span style="flex:1;">이 날 할 일</span></div>`;
+            rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📝</span><span style="flex:1;">이 날 할 일</span><span style="font-size:11px; color:#aaa;">${dayStandalone.filter(t=>t.done).length}/${dayStandalone.length}</span></div>`;
             dayStandalone.forEach(t => {
                 rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="padding-left:22px;">
                     <span>${t.done ? '✅' : '⬜'}</span>
