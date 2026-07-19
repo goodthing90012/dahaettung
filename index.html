@@ -157,6 +157,13 @@
         .exc-cell.disabled { color: #ddd; }
         .range-warn { margin-top: 5px; background: #FFF4E6; border: 1px solid #FFE0B2; color: #C05621; border-radius: 8px; padding: 6px 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
         .range-warn:active { background: #FFE9CC; }
+        .sub-tabs { display: flex; gap: 4px; background: var(--sub-tab-bg); border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+        .sub-tab { flex: 1; padding: 9px 2px; border: none; background: transparent; border-radius: 9px; font-size: 12px; font-weight: bold; color: #777; cursor: pointer; }
+        .sub-tab.active { background: var(--card); color: var(--primary-dark); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+        .group-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 4px; margin-top: 6px; border-top: 1px solid #f0f0f0; font-size: 12px; font-weight: bold; color: var(--gray); cursor: pointer; }
+        .group-head:first-child { border-top: none; margin-top: 0; }
+        .bulk-btn { background: var(--primary-tint); color: var(--primary-dark); border: none; border-radius: 8px; font-size: 11px; font-weight: bold; padding: 5px 9px; cursor: pointer; flex-shrink: 0; }
+        .bulk-btn.on { background: #F1F1F1; color: #777; }
         .seg-btn { flex: 1; padding: 8px; border: 1px solid #ddd; background: #fff; border-radius: 9px; font-size: 13px; font-weight: bold; color: #888; cursor: pointer; }
         .seg-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
         .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; }
@@ -245,7 +252,10 @@
         </div>
 
         <div class="card">
-            <div class="section-title" id="routineChecklistTitle">오늘의 루틴</div>
+            <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+                <span id="routineChecklistTitle">오늘의 루틴</span>
+                <span id="routineBulkSlot"></span>
+            </div>
             <div id="routineChecklist"></div>
         </div>
 
@@ -257,7 +267,14 @@
 
     <!-- 관리 -->
     <div id="tab-manage" class="content">
-        <div class="card">
+        <div class="sub-tabs">
+            <button class="sub-tab active" id="mtab-routine" onclick="switchManageTab('routine')">💚 루틴</button>
+            <button class="sub-tab" id="mtab-project" onclick="switchManageTab('project')">📁 프로젝트</button>
+            <button class="sub-tab" id="mtab-cycle" onclick="switchManageTab('cycle')">🔁 순환</button>
+            <button class="sub-tab" id="mtab-weekday" onclick="switchManageTab('weekday')">📅 요일</button>
+        </div>
+
+        <div class="card mpanel" id="mpanel-routine">
             <div class="section-title">💚 내 루틴</div>
             <div class="form-row">
                 <input type="text" id="newRoutineEmoji" placeholder="🌅" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
@@ -267,13 +284,14 @@
             <div id="routineMngList" style="margin-top:10px;"></div>
         </div>
 
-        <div class="card">
+        <div class="card mpanel" id="mpanel-project" style="display:none;">
             <div class="section-title">📁 프로젝트 · 일정</div>
             <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="openProjectModal()">+ 새 프로젝트 / 일정 추가</button>
+            <input type="text" id="projSearch" placeholder="🔍 프로젝트 이름 검색" oninput="renderProjectMng()" style="margin-top:8px;">
             <div id="projectMngList" style="margin-top:10px;"></div>
         </div>
 
-        <div class="card">
+        <div class="card mpanel" id="mpanel-cycle" style="display:none;">
             <div class="section-title">🔁 순환 루틴</div>
             <p style="font-size:11px; color:#999; margin:0 0 8px; line-height:1.5;">리스트를 하루에 하나씩 순서대로 순환해요. (예: 신발 돌려신기)</p>
             <div class="form-row">
@@ -284,7 +302,7 @@
             <div id="cycleMngList" style="margin-top:10px;"></div>
         </div>
 
-        <div class="card">
+        <div class="card mpanel" id="mpanel-weekday" style="display:none;">
             <div class="section-title">📅 요일 루틴</div>
             <p style="font-size:11px; color:#999; margin:0 0 8px; line-height:1.5;">요일마다 다른 항목이 떠요. (예: 화=상체, 수=러닝)</p>
             <div class="form-row">
@@ -1042,6 +1060,12 @@
         if (!rHtml) rHtml = '<div class="empty">관리 탭에서 루틴을 추가해 보세요</div>';
         rEl.innerHTML = rHtml;
 
+        // 루틴 일괄 완료 버튼
+        const rStat = routineDayStatus(checkDateStr);
+        document.getElementById('routineBulkSlot').innerHTML = (rStat.total > 0 && editable)
+            ? `<button class="bulk-btn ${rStat.done === rStat.total ? 'on' : ''}" onclick="toggleRoutinesDay()">${rStat.done === rStat.total ? '전체 해제' : '모두 완료'}</button>`
+            : '';
+
         // 이 날 할 일 (프로젝트 영역 → 단독 영역, 시각적으로 구분)
         const tEl = document.getElementById('dayTaskList');
         let html = '';
@@ -1053,8 +1077,12 @@
             html += '<div class="task-group"><div class="task-group-title">📁 프로젝트 할 일</div>';
             activeProjects.forEach(p => {
                 const dayTasks = (p.tasks || []).filter(t => t.date === checkDateStr);
+                const allDone = dayTasks.length > 0 && dayTasks.every(t => t.done);
+                const bulkBtn = (dayTasks.length > 0 && editable)
+                    ? `<button class="bulk-btn ${allDone?'on':''}" onclick="toggleProjectDay(${p.id})">${allDone ? '전체 해제' : '모두 완료'}</button>`
+                    : '';
                 html += '<div class="proj-block">';
-                html += `<div class="proj-header"><span class="proj-color-dot" style="background:${p.color};"></span><span class="check-emoji">${p.emoji||'📁'}</span>${escapeHtml(p.name)}</div>`;
+                html += `<div class="proj-header"><span class="proj-color-dot" style="background:${p.color};"></span><span class="check-emoji">${p.emoji||'📁'}</span><span style="flex:1;">${escapeHtml(p.name)}</span>${bulkBtn}</div>`;
                 html += `<button class="mini-add" style="margin-top:6px; margin-bottom:6px;" onclick="openTaskModal(${p.id})">+ 할 일 추가</button>`;
                 dayTasks.forEach(t => { html += taskRow(p.name, p.id, t); });
                 html += '</div>';
@@ -1063,7 +1091,11 @@
         }
 
         // 단독 영역
-        html += '<div class="task-group"><div class="task-group-title">📝 단독 할 일</div>';
+        const sAllDone = dayStandalone.length > 0 && dayStandalone.every(t => t.done);
+        const sBulk = (dayStandalone.length > 0 && editable)
+            ? `<button class="bulk-btn ${sAllDone?'on':''}" style="margin-left:auto;" onclick="toggleStandaloneDay()">${sAllDone ? '전체 해제' : '모두 완료'}</button>`
+            : '';
+        html += `<div class="task-group"><div class="task-group-title">📝 단독 할 일${sBulk}</div>`;
         html += '<div class="standalone-block">';
         html += '<button class="mini-add" style="margin-top:4px; margin-bottom:6px;" onclick="openTaskModal(null)">+ 단독 할 일 추가</button>';
         if (dayStandalone.length > 0) {
@@ -1498,27 +1530,155 @@
             showToast('🗑️ 삭제됐어요');
         });
     }
+    let manageTab = 'routine';
+    function switchManageTab(name) {
+        manageTab = name;
+        ['routine','project','cycle','weekday'].forEach(t => {
+            document.getElementById('mpanel-' + t).style.display = (t === name) ? 'block' : 'none';
+            document.getElementById('mtab-' + t).classList.toggle('active', t === name);
+        });
+        document.getElementById('tab-manage').scrollTop = 0;
+    }
+    let showDoneProjects = false;
+    function toggleDoneProjects() { showDoneProjects = !showDoneProjects; renderProjectMng(); }
+    // 체크 탭: 그날 루틴(일반+순환+요일) 상태
+    function routineDayStatus(dateStr) {
+        const isToday = dateStr === getTodayStr();
+        let total = 0, done = 0;
+        routines.forEach(r => { total++; if ((r.checkHistory || []).includes(dateStr)) done++; });
+        weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, dateStr)) { total++; if (weekdayIsDone(wr, dateStr)) done++; } });
+        cycleRoutines.forEach(cr => {
+            if (!cr.items || !cr.items.length) return;
+            if (cycleDoneOn(cr, dateStr)) { total++; done++; }
+            else if (isToday && cycleActiveOnDay(cr, dateStr)) total++;
+        });
+        return { total, done };
+    }
+    // 체크 탭: 그날 루틴 일괄 완료/해제
+    function toggleRoutinesDay() {
+        if (!isCheckable(checkDateStr)) { showToast('미래 날짜는 체크할 수 없어요'); return; }
+        const st = routineDayStatus(checkDateStr);
+        if (st.total === 0) return;
+        const makeDone = st.done < st.total;
+        const isToday = checkDateStr === getTodayStr();
+
+        routines.forEach(r => {
+            r.checkHistory = r.checkHistory || [];
+            const has = r.checkHistory.includes(checkDateStr);
+            if (makeDone && !has) r.checkHistory.push(checkDateStr);
+            if (!makeDone && has) r.checkHistory = r.checkHistory.filter(d => d !== checkDateStr);
+        });
+        weekdayRoutines.forEach(wr => {
+            if (!weekdayDisplayItem(wr, checkDateStr)) return;
+            wr.checkHistory = wr.checkHistory || [];
+            const rec = weekdayRecord(wr, checkDateStr);
+            if (makeDone && !rec) wr.checkHistory.push({ date: checkDateStr, item: weekdayItemOn(wr, checkDateStr) || '' });
+            if (!makeDone && rec) wr.checkHistory = wr.checkHistory.filter(x => x.date !== checkDateStr);
+        });
+        cycleRoutines.forEach(cr => {
+            if (!cr.items || !cr.items.length) return;
+            const rec = cycleDoneOn(cr, checkDateStr);
+            const len = cr.items.length;
+            if (makeDone && !rec && isToday && cycleActiveOnDay(cr, checkDateStr)) {
+                const c = cycleTodayItem(cr); if (!c) return;
+                cr.history = cr.history || [];
+                cr.history.push({ date: checkDateStr, item: c.item });
+                cr.currentIndex = (cr.currentIndex + 1) % len;
+            }
+            if (!makeDone && rec) {
+                cr.history = (cr.history || []).filter(h => h.date !== checkDateStr);
+                cr.currentIndex = (((cr.currentIndex - 1) % len) + len) % len;
+            }
+        });
+        syncAll();
+        showToast(makeDone ? '✅ 루틴을 모두 완료했어요' : '전체 해제했어요');
+    }
+    // 체크 탭: 그날 단독 할 일 일괄 완료/해제
+    function toggleStandaloneDay() {
+        if (!isCheckable(checkDateStr)) { showToast('미래 날짜는 체크할 수 없어요'); return; }
+        const dayTasks = standaloneTasks.filter(t => t.date === checkDateStr);
+        if (dayTasks.length === 0) return;
+        const allDone = dayTasks.every(t => t.done);
+        dayTasks.forEach(t => { t.done = !allDone; });
+        syncAll();
+        showToast(allDone ? '전체 해제했어요' : `✅ ${dayTasks.length}개 완료했어요`);
+    }
+    // 체크 탭: 그날 프로젝트 할 일 일괄 완료/해제
+    function toggleProjectDay(projectId) {
+        const p = projects.find(x => x.id === projectId); if (!p) return;
+        if (!isCheckable(checkDateStr)) { showToast('미래 날짜는 체크할 수 없어요'); return; }
+        const dayTasks = (p.tasks || []).filter(t => t.date === checkDateStr);
+        if (dayTasks.length === 0) return;
+        const allDone = dayTasks.every(t => t.done);
+        dayTasks.forEach(t => { t.done = !allDone; });
+        syncAll();
+        showToast(allDone ? '전체 해제했어요' : `✅ ${dayTasks.length}개 완료했어요`);
+    }
+    // 관리 탭: 프로젝트 전체 완료 (오늘까지만, 미래 할 일은 유지)
+    function completeProjectAll(projectId) {
+        const p = projects.find(x => x.id === projectId); if (!p) return;
+        const today = getTodayStr();
+        const targets = (p.tasks || []).filter(t => t.date <= today && !t.done);
+        if (targets.length === 0) { showToast('완료할 할 일이 없어요'); return; }
+        const futureCount = (p.tasks || []).filter(t => t.date > today && !t.done).length;
+        const msg = futureCount
+            ? `${targets.length}개를 완료할까요? (예정된 ${futureCount}개는 그대로 둬요)`
+            : `${targets.length}개를 모두 완료할까요?`;
+        askConfirm(msg, () => {
+            targets.forEach(t => { t.done = true; });
+            syncAll();
+            showToast(`✅ ${targets.length}개를 완료했어요`);
+        });
+    }
+    function projectIsDone(p) {
+        const pg = projectProgress(p);
+        const ended = p.endDate < getTodayStr();
+        const allDone = pg.total > 0 && pg.done === pg.total;
+        return ended || allDone;
+    }
+    function projectCardHtml(p) {
+        const pg = projectProgress(p);
+        const single = p.startDate === p.endDate;
+        const out = outOfRangeTasks(p);
+        const warn = out.length ? `<div class="range-warn" onclick="fixOutOfRangeTasks(${p.id})">⚠️ 기간 밖 할 일 ${out.length}개 · 눌러서 기간 안으로 옮기기</div>` : '';
+        return `
+        <div class="mng-item">
+            <div class="mng-info">
+                <div class="mng-name"><span class="proj-color-dot" style="background:${p.color};"></span> <span class="check-emoji">${p.emoji||'📁'}</span> ${escapeHtml(p.name)}</div>
+                <div class="mng-sub">${single ? krLabel(p.startDate) : `${p.startDate} ~ ${p.endDate}`} · 할 일 ${pg.done}/${pg.total} 완료</div>
+                ${warn}
+            </div>
+            <div class="mng-actions">
+                ${pg.done < pg.total ? `<button class="icon-btn" style="background:var(--primary-tint); color:var(--primary-dark);" onclick="completeProjectAll(${p.id})">완료</button>` : ''}
+                <button class="icon-btn" onclick="editProject(${p.id})">수정</button>
+                <button class="icon-btn del" onclick="deleteProject(${p.id})">삭제</button>
+            </div>
+        </div>`;
+    }
     function renderProjectMng() {
         const el = document.getElementById('projectMngList');
         if (projects.length === 0) { el.innerHTML = '<div class="empty">등록된 프로젝트가 없어요</div>'; return; }
-        el.innerHTML = projects.slice().sort((a,b) => a.startDate.localeCompare(b.startDate)).map(p => {
-            const pg = projectProgress(p);
-            const single = p.startDate === p.endDate;
-            const out = outOfRangeTasks(p);
-            const warn = out.length ? `<div class="range-warn" onclick="fixOutOfRangeTasks(${p.id})">⚠️ 기간 밖 할 일 ${out.length}개 · 눌러서 기간 안으로 옮기기</div>` : '';
-            return `
-            <div class="mng-item">
-                <div class="mng-info">
-                    <div class="mng-name"><span class="proj-color-dot" style="background:${p.color};"></span> <span class="check-emoji">${p.emoji||'📁'}</span> ${escapeHtml(p.name)}</div>
-                    <div class="mng-sub">${single ? krLabel(p.startDate) : `${p.startDate} ~ ${p.endDate}`} · 할 일 ${pg.done}/${pg.total} 완료</div>
-                    ${warn}
-                </div>
-                <div class="mng-actions">
-                    <button class="icon-btn" onclick="editProject(${p.id})">수정</button>
-                    <button class="icon-btn del" onclick="deleteProject(${p.id})">삭제</button>
-                </div>
-            </div>`;
-        }).join('');
+
+        const q = (document.getElementById('projSearch')?.value || '').trim().toLowerCase();
+        const filtered = projects.filter(p => !q || p.name.toLowerCase().includes(q));
+        if (filtered.length === 0) { el.innerHTML = '<div class="empty">검색 결과가 없어요</div>'; return; }
+
+        const sorted = filtered.slice().sort((a,b) => a.startDate.localeCompare(b.startDate));
+        const active = sorted.filter(p => !projectIsDone(p));
+        const done = sorted.filter(p => projectIsDone(p)).reverse(); // 최근 완료 먼저
+
+        let html = '';
+        if (active.length) {
+            html += `<div class="group-head" style="cursor:default;"><span>진행 중 (${active.length})</span></div>`;
+            html += active.map(projectCardHtml).join('');
+        } else if (!q) {
+            html += '<div class="empty">진행 중인 프로젝트가 없어요</div>';
+        }
+        if (done.length) {
+            html += `<div class="group-head" onclick="toggleDoneProjects()"><span>✅ 완료 (${done.length})</span><span>${showDoneProjects ? '▾' : '▸'}</span></div>`;
+            if (showDoneProjects || q) html += done.map(projectCardHtml).join('');
+        }
+        el.innerHTML = html;
     }
 
     // ══════════ 태스크(할 일) ══════════
