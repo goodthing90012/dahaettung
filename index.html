@@ -68,6 +68,11 @@
         .brief-row:active { background: #f7f7f7; }
         .brief-carry { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #FFF7F1; border: 1px solid #FBEADD; border-radius: 10px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
         .brief-carry button { background: var(--accent); color: white; border: none; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 7px 12px; cursor: pointer; flex-shrink: 0; }
+        .carry-detail { background: #FFFBF8; border: 1px solid #FBEADD; border-top: none; border-radius: 0 0 10px 10px; padding: 6px 12px 10px; margin-top: -4px; }
+        .carry-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: #7A5240; padding: 5px 0; word-break: break-word; }
+        .carry-btn { border: none; border-radius: 7px; font-size: 11px; font-weight: bold; padding: 5px 8px; cursor: pointer; flex-shrink: 0; }
+        .carry-btn.done { background: var(--primary-tint); color: var(--primary-dark); }
+        .carry-btn.del { background: #FFEBEB; color: var(--danger); }
         .brief-empty { font-size: 13px; color: #bbb; padding: 10px 4px; }
 
         /* 브리핑 전체화면 */
@@ -1100,6 +1105,8 @@
         }).join('');
     }
     let briefingDate = getTodayStr();
+    let showCarryDetail = false;
+    function toggleCarryDetail() { showCarryDetail = !showCarryDetail; renderBriefing(); }
     function openBriefing() { briefingDate = getTodayStr(); renderBriefing(); openOverlay('briefingOverlay'); }
     function changeBriefingDate(dir) { briefingDate = addDaysStr(briefingDate, dir); renderBriefing(); }
     function goBriefingToday() { briefingDate = getTodayStr(); renderBriefing(); }
@@ -1145,7 +1152,21 @@
         html += `<div class="brief-sec-title">📅 직전 일정${prevLabel}</div>`;
         html += pTasks.length ? briefRows(pTasks, prevDay) : '<div class="brief-empty">이전 일정이 없어요</div>';
         if (carry.length) {
-            html += `<div class="brief-carry"><span>⏭️ 못 끝낸 할 일 ${carry.length}개</span><button onclick="carryOverPrev()">${isToday ? '오늘로' : '이 날로'} 가져오기</button></div>`;
+            const isFutureRef = ref > getTodayStr();
+            html += `<div class="brief-carry">
+                <span onclick="toggleCarryDetail()" style="cursor:pointer; flex:1;">⏭️ 못 끝낸 할 일 ${carry.length}개 <span style="color:#B4552E;">${showCarryDetail ? '▾' : '▸'}</span></span>
+                ${isFutureRef ? '' : `<button onclick="carryOverPrev()">${isToday ? '오늘로' : '이 날로'} 가져오기</button>`}
+            </div>`;
+            if (showCarryDetail) {
+                html += '<div class="carry-detail">' + carry.map(it => {
+                    const pid = it.kind === 's' ? 'null' : it.projectId;
+                    return `<div class="carry-item">
+                        <span style="flex:1;">⬜ ${escapeHtml(it.name)}</span>
+                        <button class="carry-btn done" onclick="carryItemDone(${pid},${it.taskId})">✓ 완료</button>
+                        <button class="carry-btn del" onclick="carryItemDelete(${pid},${it.taskId})">✕ 삭제</button>
+                    </div>`;
+                }).join('') + '</div>';
+            }
         }
 
         // 📝 (그날) 할 일
@@ -1154,8 +1175,31 @@
 
         document.getElementById('briefingBody').innerHTML = html;
     }
+    // 이월 목록에서 개별 정리
+    function carryItemDone(projectId, taskId) {
+        const t = findTask(projectId, taskId); if (!t) return;
+        t.done = true;
+        syncAll();
+        renderBriefing();
+        showToast('✅ 완료 처리했어요');
+    }
+    function carryItemDelete(projectId, taskId) {
+        const t = findTask(projectId, taskId); if (!t) return;
+        askConfirm(`[${t.name}] 할 일을 삭제할까요?`, () => {
+            if (projectId === null || projectId === 'null') {
+                standaloneTasks = standaloneTasks.filter(x => x.id !== taskId);
+            } else {
+                const p = projects.find(x => x.id === projectId);
+                if (p) p.tasks = (p.tasks || []).filter(x => x.id !== taskId);
+            }
+            syncAll();
+            renderBriefing();
+            showToast('🗑️ 삭제했어요');
+        });
+    }
     function carryOverPrev() {
         const ref = briefingDate;
+        if (ref > getTodayStr()) { showToast('미래 날짜로는 가져올 수 없어요'); return; }
         const prevDay = findPrevTaskDay(ref);
         const list = prevDay ? collectCarry(prevDay, ref) : [];
         if (list.length === 0) { showToast('이월할 할 일이 없어요'); return; }
