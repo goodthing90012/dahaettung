@@ -869,6 +869,7 @@
 
         routines.forEach(r => {
             const done = (r.checkHistory || []).includes(dateStr);
+            if (!routineActiveOnDay(r, dateStr) && !done) return;
             rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')">
                 <span>${done ? '💚' : '⬜'}</span>
                 <span class="check-emoji">${r.emoji||'💚'}</span>
@@ -1083,11 +1084,13 @@
             html += routines.map(r => {
                 const yD = (r.checkHistory || []).includes(y);
                 const tD = (r.checkHistory || []).includes(ref);
+                if (!routineActiveOnDay(r, ref) && !tD) return '';
                 return `<div class="brief-row" onclick="goToCheckDate('${ref}')"><span style="flex:1;">${escapeHtml(r.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">전날 ${yD ? '✅' : '⬜'} · 당일 ${tD ? '✅' : '⬜'}</span></div>`;
             }).join('');
             html += cycleRoutines.map(cr => {
                 const yRec = cycleDoneOn(cr, y);
                 const tRec = cycleDoneOn(cr, ref);
+                if (!tRec && !yRec && !cycleActiveOnDay(cr, ref)) return '';
                 const pending = (isToday && !tRec && cycleActiveOnDay(cr, ref) && cycleTodayItem(cr)) ? cycleTodayItem(cr).item : null;
                 const tLabel = tRec ? `✅ ${escapeHtml(tRec)}` : (pending ? `⬜ ${escapeHtml(pending)}` : '—');
                 return `<div class="brief-row" onclick="goToCheckDate('${ref}')"><span style="flex:1;">🔁 ${escapeHtml(cr.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">${yRec ? '전날 '+escapeHtml(yRec)+' · ' : ''}당일 ${tLabel}</span></div>`;
@@ -1142,7 +1145,8 @@
         let s = `📋 다했텅 브리핑 (${krLabel(ref)})\n`;
         if (routines.length) {
             s += `\n💚 루틴\n`;
-            s += routines.map(r => `- ${r.name} (전날 ${(r.checkHistory || []).includes(y) ? '✅' : '⬜'} · 당일 ${(r.checkHistory || []).includes(ref) ? '✅' : '⬜'})`).join('\n');
+            s += routines.filter(r => routineActiveOnDay(r, ref) || (r.checkHistory || []).includes(ref))
+                .map(r => `- ${r.name} (전날 ${(r.checkHistory || []).includes(y) ? '✅' : '⬜'} · 당일 ${(r.checkHistory || []).includes(ref) ? '✅' : '⬜'})`).join('\n');
         }
         s += `\n\n📅 직전 일정${prevDay ? ` (${krLabel(prevDay)}, ${countDone(pTasks)}/${pTasks.length})` : ''}\n`;
         s += pTasks.length ? pTasks.map(line).join('\n') : '- (없음)';
