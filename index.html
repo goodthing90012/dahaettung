@@ -150,6 +150,10 @@
         .photo-thumb .del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .memo-photos { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
         .memo-photos img { width: 56px; height: 56px; object-fit: cover; border-radius: 7px; cursor: pointer; }
+        .memo-view-text { font-size: 15px; line-height: 1.7; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+        .memo-view-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+        .memo-view-photos img { width: calc(50% - 4px); border-radius: 10px; cursor: pointer; }
+        .memo-view-link { display: inline-block; background: var(--primary-tint); color: var(--primary-dark); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
         .photo-add-wrap { position: relative; width: 100%; height: 42px; }
         .photo-add-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px dashed #ccc; border-radius: 9px; color: #888; font-size: 13px; font-weight: bold; background: #fafafa; pointer-events: none; }
         .photo-add-wrap input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
@@ -480,6 +484,32 @@
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('memoOverlay')">취소</button>
             <button class="modal-btn yes" onclick="saveMemoEntry()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 메모 자세히 보기 (전체화면) -->
+<div class="overlay" id="memoViewOverlay">
+    <div class="briefing-fs">
+        <div class="brief-header">
+            <div class="brief-header-top">
+                <span class="brief-header-label">📒 메모</span>
+                <button class="brief-close" onclick="closeOverlay('memoViewOverlay')">✕</button>
+            </div>
+            <div class="brief-datenav">
+                <div id="memoViewDate"></div>
+            </div>
+        </div>
+        <div class="brief-body">
+            <div class="brief-card">
+                <div id="memoViewLink"></div>
+                <div id="memoViewText" class="memo-view-text"></div>
+                <div id="memoViewPhotos" class="memo-view-photos"></div>
+            </div>
+        </div>
+        <div class="brief-footer">
+            <button class="brief-close-btn" onclick="deleteMemoFromView()">삭제</button>
+            <button class="brief-copy-btn" onclick="editMemoFromView()">수정</button>
         </div>
     </div>
 </div>
@@ -929,7 +959,7 @@
         if (dayMemos.length) {
             rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📒</span><span style="flex:1;">메모 ${dayMemos.length}개</span></div>`;
             dayMemos.forEach(m => {
-                rows += `<div class="detail-row" onclick="closeOverlay('dateDetailOverlay'); openMemoEditor(${m.id});" style="padding-left:22px;">
+                rows += `<div class="detail-row" onclick="closeOverlay('dateDetailOverlay'); openMemoView(${m.id});" style="padding-left:22px;">
                     <span style="flex:1; font-size:13px; color:#666; white-space:pre-wrap; word-break:break-word;">${escapeHtml(m.text)}</span>
                 </div>`;
             });
@@ -1196,7 +1226,7 @@
         if (!tMemos || tMemos.length === 0) return '';
         return '<div style="padding-left:' + (projId===null?'34':'46') + 'px;">' + tMemos.map(m => `
             <div class="memo-chip">
-                <span class="memo-text" onclick="openMemoEditor(${m.id})" style="cursor:pointer;">📒 ${escapeHtml(m.text)}</span>
+                <span class="memo-text" onclick="openMemoView(${m.id})" style="cursor:pointer;">📒 ${escapeHtml(m.text)}</span>
                 <span style="color:var(--danger); cursor:pointer; flex-shrink:0;" onclick="deleteMemoEntry(${m.id})">×</span>
             </div>`).join('') + '</div>';
     }
@@ -2056,6 +2086,30 @@
         if (!m.link) return '';
         return m.link.name || (m.link.kind === 'project' ? '프로젝트 할 일' : '단독 할 일');
     }
+    // 메모 자세히 보기 (읽기 전용, 전체화면)
+    let viewingMemoId = null;
+    function openMemoView(id) {
+        const m = memoStore.find(x => x.id === id); if (!m) return;
+        viewingMemoId = id;
+        document.getElementById('memoViewDate').textContent = krLabel(m.date);
+        document.getElementById('memoViewLink').innerHTML = m.link
+            ? `<span class="memo-view-link">🔗 ${escapeHtml(memoLinkLabel(m))}</span>` : '';
+        document.getElementById('memoViewText').textContent = m.text;
+        document.getElementById('memoViewPhotos').innerHTML = (m.photos || [])
+            .map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">`).join('');
+        openOverlay('memoViewOverlay');
+    }
+    function editMemoFromView() {
+        const id = viewingMemoId;
+        closeOverlay('memoViewOverlay');
+        openMemoEditor(id);
+    }
+    function deleteMemoFromView() {
+        const id = viewingMemoId;
+        closeOverlay('memoViewOverlay');
+        deleteMemoEntry(id);
+    }
+
     // 메모 편집기 (id=null이면 새로 작성)
     let editingMemoId = null, pendingMemoLink = null;
     let memoPickedDate = null, memoCalYear = 0, memoCalMonth = 0;
@@ -2237,7 +2291,7 @@
             list.map(m => `
             <div class="memo-card">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
-                    <div style="flex:1;">
+                    <div style="flex:1; cursor:pointer;" onclick="openMemoView(${m.id})">
                         <div class="memo-body">${escapeHtml(m.text)}</div>
                         ${(m.photos && m.photos.length) ? `<div class="memo-photos">${m.photos.map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">`).join('')}</div>` : ''}
                         <div class="memo-meta">${m.date}${(m.photos && m.photos.length) ? ` · 📷 ${m.photos.length}` : ''}${m.link ? ` · 🔗 ${escapeHtml(memoLinkLabel(m))}` : ''}</div>
