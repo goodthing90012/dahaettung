@@ -2299,7 +2299,7 @@
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                     <div style="flex:1; cursor:pointer;" onclick="openMemoView(${m.id})">
                         <div class="memo-body">${escapeHtml(m.text)}</div>
-                        ${(m.photos && m.photos.length) ? `<div class="memo-photos">${m.photos.map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">`).join('')}</div>` : ''}
+                        ${(m.photos && m.photos.length) ? `<div class="memo-photos">${m.photos.map(pid => `<img src="${photoCache[pid] || ''}" onclick="event.stopPropagation(); openPhoto('${pid}')">`).join('')}</div>` : ''}
                         <div class="memo-meta">${m.date}${(m.photos && m.photos.length) ? ` · 📷 ${m.photos.length}` : ''}${m.link ? ` · 🔗 ${escapeHtml(memoLinkLabel(m))}` : ''}</div>
                     </div>
                     <div class="mng-actions" style="flex-direction:column; gap:4px;">
@@ -2358,8 +2358,19 @@
     }
 
     // ══════════ 공통 UI ══════════
-    function openOverlay(id) { document.getElementById(id).classList.add('active'); }
-    function closeOverlay(id) { document.getElementById(id).classList.remove('active'); }
+    function lockBackgroundScroll(lock) {
+        document.body.style.overflow = lock ? 'hidden' : '';
+        document.querySelectorAll('.content').forEach(c => { c.style.overflow = lock ? 'hidden' : ''; });
+    }
+    function openOverlay(id) {
+        document.getElementById(id).classList.add('active');
+        lockBackgroundScroll(true);
+    }
+    function closeOverlay(id) {
+        document.getElementById(id).classList.remove('active');
+        // 남아있는 오버레이가 없을 때만 스크롤 해제
+        if (!document.querySelector('.overlay.active')) lockBackgroundScroll(false);
+    }
     let confirmCallback = null;
     function askConfirm(text, cb) {
         document.getElementById('confirmText').textContent = text;
