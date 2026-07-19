@@ -155,6 +155,8 @@
         .exc-cell.range-edge { background: var(--primary); color: #fff; font-weight: bold; border-color: var(--primary); }
         .exc-cell.range-mid { background: var(--primary-tint); color: var(--primary-dark); }
         .exc-cell.disabled { color: #ddd; }
+        .range-warn { margin-top: 5px; background: #FFF4E6; border: 1px solid #FFE0B2; color: #C05621; border-radius: 8px; padding: 6px 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
+        .range-warn:active { background: #FFE9CC; }
         .seg-btn { flex: 1; padding: 8px; border: 1px solid #ddd; background: #fff; border-radius: 9px; font-size: 13px; font-weight: bold; color: #888; cursor: pointer; }
         .seg-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
         .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; }
@@ -553,6 +555,21 @@
         const total = (p.tasks || []).length;
         const done = (p.tasks || []).filter(t => t.done).length;
         return { done, total };
+    }
+    // 프로젝트 기간 밖으로 벗어난 할 일 (체크 탭에서 안 보이는 유령 할 일)
+    function outOfRangeTasks(p) {
+        return (p.tasks || []).filter(t => t.date < p.startDate || t.date > p.endDate);
+    }
+    // 기간 밖 할 일을 가까운 경계 날짜로 당겨오기
+    function fixOutOfRangeTasks(id) {
+        const p = projects.find(x => x.id === id); if (!p) return;
+        const out = outOfRangeTasks(p);
+        if (out.length === 0) { showToast('기간 밖 할 일이 없어요'); return; }
+        askConfirm(`기간 밖 할 일 ${out.length}개를 기간 안으로 옮길까요?`, () => {
+            out.forEach(t => { t.date = (t.date < p.startDate) ? p.startDate : p.endDate; });
+            syncAll();
+            showToast(`✅ ${out.length}개를 기간 안으로 옮겼어요`);
+        });
     }
 
     // ══════════ 렌더 파이프라인 ══════════
@@ -1460,6 +1477,12 @@
         if (editingProjectId) {
             const p = projects.find(x => x.id === editingProjectId);
             Object.assign(p, { name, emoji, color: pickedColor, startDate: start, endDate: end });
+            // 기간이 바뀌어 밖으로 밀려난 할 일은 경계 날짜로 자동 이동
+            const out = outOfRangeTasks(p);
+            if (out.length) {
+                out.forEach(t => { t.date = (t.date < p.startDate) ? p.startDate : p.endDate; });
+                showToast(`기간 밖 할 일 ${out.length}개를 기간 안으로 옮겼어요`);
+            }
         } else {
             projects.push({ id: Date.now(), name, emoji, color: pickedColor, startDate: start, endDate: end, memos: [], tasks: [] });
         }
@@ -1481,11 +1504,14 @@
         el.innerHTML = projects.slice().sort((a,b) => a.startDate.localeCompare(b.startDate)).map(p => {
             const pg = projectProgress(p);
             const single = p.startDate === p.endDate;
+            const out = outOfRangeTasks(p);
+            const warn = out.length ? `<div class="range-warn" onclick="fixOutOfRangeTasks(${p.id})">⚠️ 기간 밖 할 일 ${out.length}개 · 눌러서 기간 안으로 옮기기</div>` : '';
             return `
             <div class="mng-item">
                 <div class="mng-info">
                     <div class="mng-name"><span class="proj-color-dot" style="background:${p.color};"></span> <span class="check-emoji">${p.emoji||'📁'}</span> ${escapeHtml(p.name)}</div>
                     <div class="mng-sub">${single ? krLabel(p.startDate) : `${p.startDate} ~ ${p.endDate}`} · 할 일 ${pg.done}/${pg.total} 완료</div>
+                    ${warn}
                 </div>
                 <div class="mng-actions">
                     <button class="icon-btn" onclick="editProject(${p.id})">수정</button>
