@@ -152,6 +152,7 @@
         .memo-meta { font-size: 11px; color: var(--gray); margin-top: 6px; }
         .pv-stage { position: relative; width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; }
         .pv-stage img { max-width: 92%; max-height: 100%; border-radius: 10px; }
+        #photoViewer { overscroll-behavior: contain; touch-action: none; }
         .pv-close { position: absolute; top: 14px; right: 14px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.2); color: #fff; font-size: 18px; cursor: pointer; z-index: 2; }
         .pv-counter { color: rgba(255,255,255,0.85); font-size: 13px; font-weight: bold; padding: 14px 0 20px; }
         .photo-thumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
@@ -529,7 +530,7 @@
 <div class="overlay" id="photoViewer" style="background:rgba(0,0,0,0.93); flex-direction:column;">
     <button class="pv-close" onclick="closeOverlay('photoViewer')">✕</button>
     <div class="pv-stage">
-        <img id="photoViewerImg">
+        <img id="photoViewerImg" style="max-width:94%; max-height:100%; border-radius:10px; object-fit:contain; transform-origin:center center; will-change:transform;">
     </div>
     <div class="pv-counter" id="pvCounter"></div>
 </div>
@@ -2219,9 +2220,34 @@
         renderPhotoViewer();
         openOverlay('photoViewer');
     }
+    // ── 확대/축소 상태 ──
+    // 앱이 스와이프 제스처를 직접 처리하는 구조라, 뷰어 안에서는 확대·이동도 직접 구현한다.
+    let zScale = 1, zX = 0, zY = 0;
+    const Z_MAX = 4, Z_MIN = 1;
+    function applyZoom() {
+        const img = document.getElementById('photoViewerImg');
+        if (!img) return;
+        img.style.transform = `translate(${zX}px, ${zY}px) scale(${zScale})`;
+        img.style.transition = 'none';
+    }
+    function resetZoom() {
+        zScale = 1; zX = 0; zY = 0;
+        const img = document.getElementById('photoViewerImg');
+        if (img) { img.style.transition = 'transform 0.2s'; img.style.transform = 'translate(0,0) scale(1)'; }
+    }
+    function clampPan() {
+        // 확대 배율에 비례해 이동 범위를 제한 (사진이 화면 밖으로 완전히 나가지 않게)
+        const img = document.getElementById('photoViewerImg');
+        if (!img) return;
+        const maxX = (img.clientWidth  * (zScale - 1)) / 2;
+        const maxY = (img.clientHeight * (zScale - 1)) / 2;
+        zX = Math.max(-maxX, Math.min(maxX, zX));
+        zY = Math.max(-maxY, Math.min(maxY, zY));
+    }
     function renderPhotoViewer() {
         const pid = viewerPhotos[viewerIndex];
         document.getElementById('photoViewerImg').src = photoCache[pid] || '';
+        resetZoom();
         const multi = viewerPhotos.length > 1;
         document.getElementById('pvCounter').textContent = multi ? `${viewerIndex + 1} / ${viewerPhotos.length}` : '';
     }
@@ -2230,23 +2256,72 @@
         viewerIndex = (viewerIndex + dir + viewerPhotos.length) % viewerPhotos.length;
         renderPhotoViewer();
     }
-    // 스와이프로 넘기기
-    (function initPhotoSwipe() {
+    // 제스처: 핀치 확대 · 더블탭 확대 · 확대 중 이동 · 좌우 스와이프 · 여백 탭 닫기
+    (function initPhotoGestures() {
         const stage = document.getElementById('photoViewer');
         if (!stage) return;
         let startX = 0, startY = 0, moved = false;
+        let pinching = false, startDist = 0, startScale = 1;
+        let panX = 0, panY = 0, startZX = 0, startZY = 0;
+        let lastTapAt = 0;
+        const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
         stage.addEventListener('touchstart', e => {
-            const t = e.touches[0]; startX = t.clientX; startY = t.clientY; moved = false;
+            if (e.touches.length === 2) {
+                pinching = true; moved = true;
+                startDist = dist(e.touches[0], e.touches[1]);
+                startScale = zScale;
+                return;
+            }
+            const t = e.touches[0];
+            startX = t.clientX; startY = t.clientY; moved = false;
+            panX = t.clientX; panY = t.clientY;
+            startZX = zX; startZY = zY;
         }, { passive: true });
+
         stage.addEventListener('touchmove', e => {
+            if (pinching && e.touches.length === 2) {
+                const ratio = dist(e.touches[0], e.touches[1]) / (startDist || 1);
+                zScale = Math.max(Z_MIN, Math.min(Z_MAX, startScale * ratio));
+                if (zScale === 1) { zX = 0; zY = 0; }
+                clampPan(); applyZoom();
+                return;
+            }
             const t = e.touches[0];
             if (Math.abs(t.clientX - startX) > 12 || Math.abs(t.clientY - startY) > 12) moved = true;
+            if (zScale > 1 && e.touches.length === 1) {
+                zX = startZX + (t.clientX - panX);
+                zY = startZY + (t.clientY - panY);
+                clampPan(); applyZoom();
+            }
         }, { passive: true });
+
         stage.addEventListener('touchend', e => {
+            if (e.target.closest('.pv-close')) return;
+            if (pinching) {
+                if (e.touches.length === 0) pinching = false;
+                if (zScale <= 1.02) resetZoom();
+                return;
+            }
             const t = e.changedTouches[0];
             const dx = t.clientX - startX, dy = t.clientY - startY;
+
+            // 더블탭으로 확대 / 원래대로
+            const now = Date.now();
+            if (!moved) {
+                if (now - lastTapAt < 300) {
+                    lastTapAt = 0;
+                    if (zScale > 1) { resetZoom(); }
+                    else { zScale = 2.5; clampPan(); applyZoom(); }
+                    return;
+                }
+                lastTapAt = now;
+            }
+
+            // 확대 중에는 넘기기·닫기를 하지 않는다 (사진을 살펴보는 중이므로)
+            if (zScale > 1) return;
+
             if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { movePhoto(dx < 0 ? 1 : -1); return; }
-            // 사진·버튼 위 탭은 유지, 바깥 여백만 닫기
             if (!moved) {
                 const el = document.elementFromPoint(t.clientX, t.clientY);
                 const onContent = el && (el.id === 'photoViewerImg' || el.closest('.pv-close'));
