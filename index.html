@@ -102,6 +102,7 @@
         .cal-cell .daynum { line-height: 1; }
         .cal-mark { font-size: 20px; line-height: 1; margin-top: 2px; height: 23px; }
         .cal-char { height: 58px; width: auto; display: block; margin-top: 1px; }
+        .cal-memo { position: absolute; top: 2px; right: 3px; font-size: 11px; line-height: 1; }
         .cal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin-top: 4px; }
         .cal-bars { position: absolute; left: 3px; right: 3px; bottom: 3px; display: flex; flex-direction: column; gap: 2px; }
         .cal-bar { height: 4px; }
@@ -141,6 +142,17 @@
         .icon-btn.del { background: #FFEBEB; color: var(--danger); }
         .memo-chip { font-size: 11px; color: #666; background: #F6F6F6; border-radius: 8px; padding: 4px 8px; margin-top: 4px; display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
         .memo-chip .memo-text { flex: 1; white-space: pre-wrap; word-break: break-word; }
+        .memo-card { background: var(--card); border: 1px solid #f0f0f0; border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+        .memo-body { font-size: 13px; color: var(--text); white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+        .memo-meta { font-size: 11px; color: var(--gray); margin-top: 6px; }
+        .photo-thumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+        .photo-thumb img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; }
+        .photo-thumb .del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .memo-photos { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+        .memo-photos img { width: 56px; height: 56px; object-fit: cover; border-radius: 7px; cursor: pointer; }
+        .photo-add-wrap { position: relative; width: 100%; height: 42px; }
+        .photo-add-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px dashed #ccc; border-radius: 9px; color: #888; font-size: 13px; font-weight: bold; background: #fafafa; pointer-events: none; }
+        .photo-add-wrap input[type=file] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
         .memo-add { background: none; border: 1px dashed #ddd; color: #aaa; border-radius: 8px; font-size: 11px; padding: 3px 9px; cursor: pointer; margin-top: 4px; }
         .color-picker { display: flex; gap: 8px; margin-top: 4px; }
         .cycle-item { display: flex; align-items: center; gap: 4px; padding: 5px 4px; border-bottom: 1px solid #f4f4f4; font-size: 13px; }
@@ -238,6 +250,7 @@
                 <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block;"></span></span> 일부 완료</span>
                 <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;"></span></span> 안 한 일 남음</span>
                 <span><span class="lg-mark"><span style="width:16px;height:4px;background:#4C6EF5;border-radius:2px;display:inline-block;"></span></span> 프로젝트 기간</span>
+                <span><span class="lg-mark">📒</span> 메모 있음</span>
             </div>
         </div>
     </div>
@@ -315,6 +328,18 @@
     </div>
 
     <!-- 설정 -->
+    <!-- 메모 -->
+    <div id="tab-memo" class="content">
+        <div class="card">
+            <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+                <span>📒 메모 <span id="memoTotalCount" style="color:var(--gray); font-weight:normal;"></span></span>
+            </div>
+            <button class="btn btn-primary btn-sm" style="width:100%;" onclick="openMemoEditor(null)">+ 새 메모 작성</button>
+            <input type="text" id="memoSearch" placeholder="🔍 메모 검색" oninput="renderMemoTab()" style="margin-top:8px;">
+            <div id="memoList" style="margin-top:10px;"></div>
+        </div>
+    </div>
+
     <div id="tab-settings" class="content">
         <div class="card">
             <div class="section-title">💾 데이터 백업</div>
@@ -338,6 +363,7 @@
     <div class="tab-bar">
         <div class="tab-item active" id="btn-home" onclick="switchTab('home')"><span class="tab-icon">🏠</span><span>홈</span></div>
         <div class="tab-item" id="btn-check" onclick="switchTab('check')"><span class="tab-icon">✅</span><span>체크</span></div>
+        <div class="tab-item" id="btn-memo" onclick="switchTab('memo')"><span class="tab-icon">📒</span><span>메모</span></div>
         <div class="tab-item" id="btn-manage" onclick="switchTab('manage')"><span class="tab-icon">🗂️</span><span>관리</span></div>
         <div class="tab-item" id="btn-settings" onclick="switchTab('settings')"><span class="tab-icon">⚙️</span><span>설정</span></div>
     </div>
@@ -432,13 +458,46 @@
 <!-- 메모 모달 -->
 <div class="overlay" id="memoOverlay">
     <div class="modal">
-        <h3>메모 추가</h3>
+        <h3 id="memoModalTitle">새 메모</h3>
         <label class="fld">날짜</label>
-        <input type="date" id="memoDate" style="margin-bottom:8px;">
-        <textarea id="memoText" maxlength="150" rows="3" placeholder="메모 내용을 입력하세요"></textarea>
+        <div class="cal-head" style="margin-bottom:6px;">
+            <button class="cal-nav-btn" onclick="changeMemoMonth(-1)">‹</button>
+            <div class="cal-month" id="memoMonthLabel"></div>
+            <button class="cal-nav-btn" onclick="changeMemoMonth(1)">›</button>
+        </div>
+        <div id="memoCalGrid"></div>
+        <div id="memoDateLabel" style="font-size:11px; color:var(--gray); text-align:center; margin:8px 0;"></div>
+        <textarea id="memoText" maxlength="2000" rows="6" placeholder="메모 내용을 입력하세요 (여러 줄 가능)"></textarea>
+        <div id="memoPhotoArea" style="margin-top:10px;">
+            <div style="font-size:11px; font-weight:bold; color:var(--gray); margin-bottom:4px;">사진</div>
+            <div id="memoPhotoList" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;"></div>
+            <div class="photo-add-wrap">
+                <span class="photo-add-face">📷 사진 추가</span>
+                <input type="file" id="memoPhotoInput" accept="image/*" multiple onchange="addMemoPhotos(this.files)">
+            </div>
+        </div>
+        <div id="memoLinkInfo" style="font-size:11px; color:var(--gray); margin-top:6px;"></div>
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('memoOverlay')">취소</button>
-            <button class="modal-btn yes" onclick="saveMemo()">저장</button>
+            <button class="modal-btn yes" onclick="saveMemoEntry()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 사진 뷰어 -->
+<div class="overlay" id="photoViewer" onclick="closeOverlay('photoViewer')" style="background:rgba(0,0,0,0.9);">
+    <img id="photoViewerImg" style="max-width:96%; max-height:88%; border-radius:10px;">
+</div>
+
+<!-- 메모 연결 모달 -->
+<div class="overlay" id="linkOverlay">
+    <div class="modal">
+        <h3>할 일에 연결</h3>
+        <input type="text" id="linkSearch" placeholder="🔍 할 일 검색" oninput="renderLinkList()" style="margin-bottom:8px;">
+        <div id="linkCurrent" style="margin-bottom:8px;"></div>
+        <div id="linkList" style="max-height:45vh; overflow-y:auto;"></div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('linkOverlay')">닫기</button>
         </div>
     </div>
 </div>
@@ -501,6 +560,78 @@
     const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 표시 순서: 월~일
     const krLabel = (dateStr) => { const d = new Date(parseDate(dateStr)); const w=['일','월','화','수','목','금','토'][d.getDay()]; return `${d.getMonth()+1}월 ${d.getDate()}일 (${w})`; };
 
+    // ══════════ 사진 저장소 (IndexedDB) ══════════
+    const PHOTO_DB = 'dahaettung_photos', PHOTO_STORE = 'photos';
+    let photoCache = {}; // id -> dataURL (렌더용 런타임 캐시)
+    function openPhotoDB() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(PHOTO_DB, 1);
+            req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE);
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+    async function photoPut(id, dataUrl) {
+        photoCache[id] = dataUrl;
+        try {
+            const db = await openPhotoDB();
+            await new Promise((res, rej) => {
+                const tx = db.transaction(PHOTO_STORE, 'readwrite');
+                tx.objectStore(PHOTO_STORE).put(dataUrl, id);
+                tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+            });
+        } catch (e) { console.error('사진 저장 실패', e); showToast('⚠️ 사진 저장에 실패했어요'); }
+    }
+    async function photoDelete(id) {
+        delete photoCache[id];
+        try {
+            const db = await openPhotoDB();
+            await new Promise((res) => {
+                const tx = db.transaction(PHOTO_STORE, 'readwrite');
+                tx.objectStore(PHOTO_STORE).delete(id);
+                tx.oncomplete = res; tx.onerror = res;
+            });
+        } catch (e) { console.error('사진 삭제 실패', e); }
+    }
+    async function photoLoadAll() {
+        try {
+            const db = await openPhotoDB();
+            const all = await new Promise((res, rej) => {
+                const tx = db.transaction(PHOTO_STORE, 'readonly');
+                const store = tx.objectStore(PHOTO_STORE);
+                const keysReq = store.getAllKeys(), valsReq = store.getAll();
+                tx.oncomplete = () => res({ keys: keysReq.result, vals: valsReq.result });
+                tx.onerror = () => rej(tx.error);
+            });
+            photoCache = {};
+            all.keys.forEach((k, i) => { photoCache[k] = all.vals[i]; });
+        } catch (e) { console.error('사진 로드 실패', e); photoCache = {}; }
+    }
+    // 업로드 사진 축소 (가로 최대 1200px, JPEG 압축)
+    function resizePhoto(file, maxW = 1200, quality = 0.8) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    const scale = Math.min(1, maxW / img.width);
+                    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
     // ══════════ 저장소 ══════════
     const STORAGE_KEY = 'dahaettung_data_v1';
     const PROJECT_COLORS = ['#4C6EF5', '#22B07D', '#FF7A3D', '#E64980', '#7C5CFF', '#F0A500'];
@@ -511,7 +642,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -533,6 +664,41 @@
     let standaloneTasks = (saved && Array.isArray(saved.standaloneTasks)) ? saved.standaloneTasks : [];
     let cycleRoutines = (saved && Array.isArray(saved.cycleRoutines)) ? saved.cycleRoutines : [];
     let weekdayRoutines = (saved && Array.isArray(saved.weekdayRoutines)) ? saved.weekdayRoutines : [];
+    let memoStore = (saved && Array.isArray(saved.memoStore)) ? saved.memoStore : [];
+
+    // 기존에 흩어져 있던 메모들을 메모 창고로 1회 이전 (데이터 손실 방지)
+    function migrateMemosToStore() {
+        let moved = 0;
+        const push = (m, link) => {
+            memoStore.push({
+                id: Date.now() + Math.floor(Math.random() * 100000) + moved,
+                text: m.text || '',
+                date: m.date || getTodayStr(),
+                photos: [],
+                link: link || null
+            });
+            moved++;
+        };
+        standaloneTasks.forEach(t => {
+            if (t.memos && t.memos.length) {
+                t.memos.forEach(m => push(m, { kind: 'standalone', taskId: t.id, name: t.name }));
+                t.memos = [];
+            }
+        });
+        projects.forEach(p => {
+            (p.tasks || []).forEach(t => {
+                if (t.memos && t.memos.length) {
+                    t.memos.forEach(m => push(m, { kind: 'project', projectId: p.id, taskId: t.id, name: `[${p.name}] ${t.name}` }));
+                    t.memos = [];
+                }
+            });
+            if (p.memos && p.memos.length) { p.memos.forEach(m => push(m, null)); p.memos = []; }
+        });
+        [routines, cycleRoutines, weekdayRoutines].forEach(arr => arr.forEach(r => {
+            if (r.memos && r.memos.length) { r.memos.forEach(m => push(m, null)); r.memos = []; }
+        }));
+        if (moved > 0) saveToStorage();
+    }
 
     // ══════════ 완료 판정 · 스트릭 ══════════
     function isRoutineDayDone(dateStr) {
@@ -594,6 +760,7 @@
     function syncAll() {
         saveToStorage();
         renderCheckTab();
+        if (document.getElementById('tab-memo').classList.contains('active')) renderMemoTab();
         renderRoutineMng();
         renderCycleMng();
         renderWeekdayMng();
@@ -604,13 +771,14 @@
     let currentTab = 'home';
     function switchTab(name) {
         currentTab = name;
-        ['home','check','manage','settings'].forEach(t => {
+        ['home','check','memo','manage','settings'].forEach(t => {
             document.getElementById('tab-' + t).classList.toggle('active', t === name);
             document.getElementById('btn-' + t).classList.toggle('active', t === name);
         });
         document.getElementById('tab-' + name).scrollTop = 0;
         if (name === 'home') renderHome();
         if (name === 'check') renderCheckTab();
+        if (name === 'memo') renderMemoTab();
         if (name === 'manage') { renderRoutineMng(); renderCycleMng(); renderWeekdayMng(); renderProjectMng(); }
         if (name === 'settings') updateLastSavedLabel();
     }
@@ -684,8 +852,9 @@
                 }).join('') + '</div>';
             }
 
+            const memoIcon = memosOnDate(dateStr).length ? '<span class="cal-memo">📒</span>' : '';
             html += `<div class="cal-cell ${isToday?'cal-today':''}" onclick="showDateDetail('${dateStr}')">
-                <div class="daynum">${d}</div>${mark}${bars}
+                <div class="daynum">${d}</div>${mark}${memoIcon}${bars}
             </div>`;
         }
         html += '</div>';
@@ -752,6 +921,15 @@
                 rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')" style="padding-left:22px;">
                     <span>${t.done ? '✅' : '⬜'}</span>
                     <span style="flex:1; font-size:13px; ${t.done?'color:#aaa;':''}">${escapeHtml(t.name)}</span>
+                </div>`;
+            });
+        }
+        const dayMemos = memosOnDate(dateStr);
+        if (dayMemos.length) {
+            rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📒</span><span style="flex:1;">메모 ${dayMemos.length}개</span></div>`;
+            dayMemos.forEach(m => {
+                rows += `<div class="detail-row" onclick="closeOverlay('dateDetailOverlay'); openMemoEditor(${m.id});" style="padding-left:22px;">
+                    <span style="flex:1; font-size:13px; color:#666; white-space:pre-wrap; word-break:break-word;">${escapeHtml(m.text)}</span>
                 </div>`;
             });
         }
@@ -1001,21 +1179,21 @@
 
     function taskRow(projLabel, projId, t) {
         const pid = projId === null ? 'null' : projId;
+        const tMemos = memosForTask(projId, t.id);
         return `<div class="check-item" style="padding-left:${projId===null?'6':'18'}px;">
             <div class="check-box ${t.done?'done':''}" onclick="toggleTask(${pid},${t.id})">${t.done?'✓':''}</div>
             <span class="check-name ${t.done?'done':''}">${escapeHtml(t.name)}</span>
             <button class="icon-btn" onclick="editTask(${pid},${t.id})">수정</button>
-            <button class="icon-btn" onclick="openMemo('task',${pid},${t.id})">📝${(t.memos&&t.memos.length)?t.memos.length:''}</button>
+            <button class="icon-btn" onclick="addMemoForTask(${pid},${t.id})">📒${tMemos.length || ''}</button>
             <button class="icon-btn del" onclick="deleteTask(${pid},${t.id})">×</button>
-        </div>` + renderTaskMemos(projId, t);
+        </div>` + renderTaskMemos(projId, t, tMemos);
     }
-    function renderTaskMemos(projId, t) {
-        if (!t.memos || t.memos.length === 0) return '';
-        const pid = projId === null ? 'null' : projId;
-        return '<div style="padding-left:' + (projId===null?'34':'46') + 'px;">' + t.memos.map((m, idx) => `
+    function renderTaskMemos(projId, t, tMemos) {
+        if (!tMemos || tMemos.length === 0) return '';
+        return '<div style="padding-left:' + (projId===null?'34':'46') + 'px;">' + tMemos.map(m => `
             <div class="memo-chip">
-                <span class="memo-text">📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
-                <span style="color:var(--danger); cursor:pointer; flex-shrink:0;" onclick="confirmDeleteTaskMemo(${pid},${t.id},${idx})">×</span>
+                <span class="memo-text" onclick="openMemoEditor(${m.id})" style="cursor:pointer;">📒 ${escapeHtml(m.text)}</span>
+                <span style="color:var(--danger); cursor:pointer; flex-shrink:0;" onclick="deleteMemoEntry(${m.id})">×</span>
             </div>`).join('') + '</div>';
     }
 
@@ -1863,72 +2041,216 @@
         const list = getTaskList(projectId); if (!list) return null;
         return list.find(x => x.id === taskId) || null;
     }
-    function deleteTaskMemo(projectId, taskId, idx) {
-        const t = findTask(projectId, taskId);
-        if (t && t.memos) t.memos.splice(idx, 1);
-        syncAll();
+    // ══════════ 메모 창고 ══════════
+    function memosForTask(projectId, taskId) {
+        const pid = (projectId === null || projectId === 'null') ? null : projectId;
+        return memoStore.filter(m => m.link && m.link.taskId === taskId &&
+            (pid === null ? m.link.kind === 'standalone' : m.link.projectId === pid));
     }
-    function confirmDeleteTaskMemo(projectId, taskId, idx) {
-        askConfirm('이 메모를 삭제할까요?', () => {
-            deleteTaskMemo(projectId, taskId, idx);
-            showToast('🗑️ 메모가 삭제됐어요');
-        });
+    function memosOnDate(dateStr) { return memoStore.filter(m => m.date === dateStr); }
+    function memoLinkLabel(m) {
+        if (!m.link) return '';
+        return m.link.name || (m.link.kind === 'project' ? '프로젝트 할 일' : '단독 할 일');
     }
-
-    // ══════════ 메모 (루틴/프로젝트 공통) ══════════
-    let memoTarget = null; // { kind, id, taskId? }
-    function renderMemos(kind, id, memos) {
-        let html = (memos || []).map((m, idx) => `
-            <div class="memo-chip">
-                <span class="memo-text">📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</span>
-                <span style="color:var(--danger); cursor:pointer; flex-shrink:0;" onclick="confirmDeleteMemo('${kind}',${id},${idx})">×</span>
+    // 메모 편집기 (id=null이면 새로 작성)
+    let editingMemoId = null, pendingMemoLink = null;
+    let memoPickedDate = null, memoCalYear = 0, memoCalMonth = 0;
+    let memoWorkingPhotos = []; // 편집 중 사진 id 목록
+    async function addMemoPhotos(files) {
+        if (!files || !files.length) return;
+        showToast('사진을 처리하는 중…');
+        for (const f of files) {
+            try {
+                const dataUrl = await resizePhoto(f);
+                const pid = 'p' + Date.now() + Math.floor(Math.random() * 10000);
+                await photoPut(pid, dataUrl);
+                memoWorkingPhotos.push(pid);
+            } catch (e) { console.error(e); showToast('⚠️ 사진을 불러오지 못했어요'); }
+        }
+        document.getElementById('memoPhotoInput').value = '';
+        renderMemoPhotos();
+        showToast(`📷 사진 ${files.length}장 추가됐어요`);
+    }
+    function removeMemoPhoto(pid) {
+        memoWorkingPhotos = memoWorkingPhotos.filter(x => x !== pid);
+        photoDelete(pid);
+        renderMemoPhotos();
+    }
+    function renderMemoPhotos() {
+        document.getElementById('memoPhotoList').innerHTML = memoWorkingPhotos.map(pid => `
+            <div class="photo-thumb">
+                <img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">
+                <span class="del" onclick="removeMemoPhoto('${pid}')">✕</span>
             </div>`).join('');
-        html += `<button class="memo-add" onclick="openMemo('${kind}',${id})">+ 메모</button>`;
-        return html;
     }
-    function openMemo(kind, id, taskId) {
-        memoTarget = { kind, id, taskId };
-        document.getElementById('memoDate').value = (kind === 'task') ? '' : getTodayStr();
-        document.getElementById('memoText').value = '';
+    function openPhoto(pid) {
+        document.getElementById('photoViewerImg').src = photoCache[pid] || '';
+        openOverlay('photoViewer');
+    }
+    function changeMemoMonth(dir) {
+        memoCalMonth += dir;
+        if (memoCalMonth < 0) { memoCalMonth = 11; memoCalYear--; }
+        if (memoCalMonth > 11) { memoCalMonth = 0; memoCalYear++; }
+        renderMemoCal();
+    }
+    function pickMemoDate(dateStr) { memoPickedDate = dateStr; renderMemoCal(); }
+    function renderMemoCal() {
+        document.getElementById('memoMonthLabel').textContent = `${memoCalYear}년 ${memoCalMonth + 1}월`;
+        const firstDay = new Date(memoCalYear, memoCalMonth, 1).getDay();
+        const daysInMonth = new Date(memoCalYear, memoCalMonth + 1, 0).getDate();
+        const todayStr = getTodayStr();
+        let html = '<div class="cal-grid">';
+        ['일','월','화','수','목','금','토'].forEach(d => html += `<div class="cal-dow">${d}</div>`);
+        for (let i = 0; i < firstDay; i++) html += '<div></div>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${memoCalYear}-${String(memoCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const cls = ['exc-cell'];
+            if (dateStr === memoPickedDate) cls.push('picked');
+            if (dateStr === todayStr) cls.push('today');
+            html += `<div class="${cls.join(' ')}" onclick="pickMemoDate('${dateStr}')">${d}</div>`;
+        }
+        html += '</div>';
+        document.getElementById('memoCalGrid').innerHTML = html;
+        document.getElementById('memoDateLabel').textContent = memoPickedDate ? krLabel(memoPickedDate) : '날짜를 선택해 주세요';
+    }
+    function openMemoEditor(id, link) {
+        editingMemoId = id;
+        pendingMemoLink = link || null;
+        const m = id ? memoStore.find(x => x.id === id) : null;
+        document.getElementById('memoModalTitle').textContent = m ? '메모 수정' : '새 메모';
+        memoPickedDate = m ? m.date : ((link && link.date) ? link.date : getTodayStr());
+        const mb = new Date(parseDate(memoPickedDate));
+        memoCalYear = mb.getFullYear(); memoCalMonth = mb.getMonth();
+        renderMemoCal();
+        document.getElementById('memoText').value = m ? m.text : '';
+        memoWorkingPhotos = m && Array.isArray(m.photos) ? m.photos.slice() : [];
+        renderMemoPhotos();
+        const linkInfo = m ? m.link : pendingMemoLink;
+        document.getElementById('memoLinkInfo').textContent = linkInfo ? `🔗 ${linkInfo.name || ''}` : '';
         openOverlay('memoOverlay');
     }
-    function getMemoHolder() {
-        if (!memoTarget) return null;
-        if (memoTarget.kind === 'routine') return routines.find(x => x.id === memoTarget.id);
-        if (memoTarget.kind === 'cycle') return cycleRoutines.find(x => x.id === memoTarget.id);
-        if (memoTarget.kind === 'weekday') return weekdayRoutines.find(x => x.id === memoTarget.id);
-        if (memoTarget.kind === 'project') return projects.find(x => x.id === memoTarget.id);
-        if (memoTarget.kind === 'task') return findTask(memoTarget.id, memoTarget.taskId);
-        return null;
-    }
-    function saveMemo() {
-        const holder = getMemoHolder(); if (!holder) return;
+    function saveMemoEntry() {
         const text = document.getElementById('memoText').value.trim();
+        const date = memoPickedDate || getTodayStr();
         if (!text) { showToast('메모 내용을 입력해 주세요'); return; }
-        holder.memos = holder.memos || [];
-        holder.memos.push({ date: document.getElementById('memoDate').value || '', text });
+        if (editingMemoId) {
+            const m = memoStore.find(x => x.id === editingMemoId);
+            if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); }
+        } else {
+            memoStore.push({ id: Date.now(), text, date, photos: memoWorkingPhotos.slice(), link: pendingMemoLink });
+        }
+        memoWorkingPhotos = [];
+        editingMemoId = null; pendingMemoLink = null;
         closeOverlay('memoOverlay');
         syncAll();
-        showToast('📝 메모가 추가됐어요');
+        showToast('📒 메모가 저장됐어요');
     }
-    function deleteMemo(kind, id, idx) {
-        const holder = kind === 'routine' ? routines.find(x => x.id === id)
-            : kind === 'cycle' ? cycleRoutines.find(x => x.id === id)
-            : kind === 'weekday' ? weekdayRoutines.find(x => x.id === id)
-            : projects.find(x => x.id === id);
-        if (holder && holder.memos) holder.memos.splice(idx, 1);
-        syncAll();
-    }
-    function confirmDeleteMemo(kind, id, idx) {
+    function deleteMemoEntry(id) {
+        const m = memoStore.find(x => x.id === id); if (!m) return;
         askConfirm('이 메모를 삭제할까요?', () => {
-            deleteMemo(kind, id, idx);
+            (m.photos || []).forEach(pid => photoDelete(pid));
+            memoStore = memoStore.filter(x => x.id !== id);
+            syncAll();
             showToast('🗑️ 메모가 삭제됐어요');
         });
+    }
+    // 할 일에서 메모 추가
+    function addMemoForTask(projectId, taskId) {
+        const t = findTask(projectId, taskId); if (!t) return;
+        const pid = (projectId === null || projectId === 'null') ? null : projectId;
+        const p = pid === null ? null : projects.find(x => x.id === pid);
+        openMemoEditor(null, pid === null
+            ? { kind: 'standalone', taskId, name: t.name, date: t.date }
+            : { kind: 'project', projectId: pid, taskId, name: `[${p ? p.name : ''}] ${t.name}`, date: t.date });
+    }
+    // ── 메모 ↔ 할 일 연결 ──
+    let linkingMemoId = null;
+    function openLinkModal(memoId) {
+        linkingMemoId = memoId;
+        document.getElementById('linkSearch').value = '';
+        renderLinkList();
+        openOverlay('linkOverlay');
+    }
+    function allTasksForLink() {
+        const list = [];
+        standaloneTasks.forEach(t => list.push({ kind: 'standalone', taskId: t.id, date: t.date, name: t.name, label: t.name }));
+        projects.forEach(p => (p.tasks || []).forEach(t => list.push({
+            kind: 'project', projectId: p.id, taskId: t.id, date: t.date,
+            name: `[${p.name}] ${t.name}`, label: `[${p.name}] ${t.name}`
+        })));
+        return list.sort((a, b) => b.date.localeCompare(a.date));
+    }
+    function renderLinkList() {
+        const m = memoStore.find(x => x.id === linkingMemoId);
+        const cur = document.getElementById('linkCurrent');
+        cur.innerHTML = (m && m.link)
+            ? `<div class="memo-chip"><span class="memo-text">🔗 ${escapeHtml(memoLinkLabel(m))}</span><span style="color:var(--danger); cursor:pointer; font-weight:bold;" onclick="unlinkMemo()">연결 해제</span></div>`
+            : '<div style="font-size:11px; color:#bbb;">연결된 할 일이 없어요</div>';
+
+        const q = (document.getElementById('linkSearch').value || '').trim().toLowerCase();
+        const list = allTasksForLink().filter(t => !q || t.label.toLowerCase().includes(q)).slice(0, 60);
+        const el = document.getElementById('linkList');
+        if (list.length === 0) { el.innerHTML = '<div class="empty">할 일이 없어요</div>'; return; }
+        el.innerHTML = list.map(t => `
+            <div class="detail-row" onclick="linkMemoTo('${t.kind}',${t.projectId || 'null'},${t.taskId})">
+                <span style="flex:1; font-size:13px;">${escapeHtml(t.label)}</span>
+                <span style="font-size:11px; color:#aaa;">${t.date.slice(5).replace('-', '/')}</span>
+            </div>`).join('');
+    }
+    function linkMemoTo(kind, projectId, taskId) {
+        const m = memoStore.find(x => x.id === linkingMemoId); if (!m) return;
+        const pid = (projectId === null || projectId === 'null') ? null : projectId;
+        const t = findTask(pid, taskId); if (!t) return;
+        const p = pid === null ? null : projects.find(x => x.id === pid);
+        m.link = pid === null
+            ? { kind: 'standalone', taskId, name: t.name }
+            : { kind: 'project', projectId: pid, taskId, name: `[${p ? p.name : ''}] ${t.name}` };
+        closeOverlay('linkOverlay');
+        syncAll();
+        renderMemoTab();
+        showToast('🔗 연결했어요');
+    }
+    function unlinkMemo() {
+        const m = memoStore.find(x => x.id === linkingMemoId); if (!m) return;
+        m.link = null;
+        syncAll();
+        renderLinkList();
+        renderMemoTab();
+        showToast('연결을 해제했어요');
+    }
+    function renderMemoTab() {
+        document.getElementById('memoTotalCount').textContent = `(${memoStore.length})`;
+        const el = document.getElementById('memoList');
+        if (memoStore.length === 0) { el.innerHTML = '<div class="empty">작성된 메모가 없어요</div>'; return; }
+        const q = (document.getElementById('memoSearch')?.value || '').trim().toLowerCase();
+        const list = memoStore.filter(m => !q || m.text.toLowerCase().includes(q) || memoLinkLabel(m).toLowerCase().includes(q))
+            .slice().sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+        if (list.length === 0) { el.innerHTML = '<div class="empty">검색 결과가 없어요</div>'; return; }
+        el.innerHTML = `<div style="font-size:11px; color:var(--gray); margin-bottom:6px;">${q ? `검색 ${list.length}개` : `전체 ${list.length}개`}</div>` +
+            list.map(m => `
+            <div class="memo-card">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                    <div style="flex:1;">
+                        <div class="memo-body">${escapeHtml(m.text)}</div>
+                        ${(m.photos && m.photos.length) ? `<div class="memo-photos">${m.photos.map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">`).join('')}</div>` : ''}
+                        <div class="memo-meta">${m.date}${(m.photos && m.photos.length) ? ` · 📷 ${m.photos.length}` : ''}${m.link ? ` · 🔗 ${escapeHtml(memoLinkLabel(m))}` : ''}</div>
+                    </div>
+                    <div class="mng-actions" style="flex-direction:column; gap:4px;">
+                        <button class="icon-btn" onclick="openMemoEditor(${m.id})">수정</button>
+                        <button class="icon-btn" style="background:var(--primary-tint); color:var(--primary-dark);" onclick="openLinkModal(${m.id})">연결</button>
+                        <button class="icon-btn del" onclick="deleteMemoEntry(${m.id})">삭제</button>
+                    </div>
+                </div>
+            </div>`).join('');
     }
 
     // ══════════ 백업 / 복원 ══════════
     function exportBackup() {
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines };
+        const usedIds = new Set();
+        memoStore.forEach(m => (m.photos || []).forEach(pid => usedIds.add(pid)));
+        const photos = {};
+        usedIds.forEach(pid => { if (photoCache[pid]) photos[pid] = photoCache[pid]; });
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, photos };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1951,6 +2273,10 @@
                 standaloneTasks = Array.isArray(parsed.standaloneTasks) ? parsed.standaloneTasks : [];
                 cycleRoutines = Array.isArray(parsed.cycleRoutines) ? parsed.cycleRoutines : [];
                 weekdayRoutines = Array.isArray(parsed.weekdayRoutines) ? parsed.weekdayRoutines : [];
+                memoStore = Array.isArray(parsed.memoStore) ? parsed.memoStore : [];
+                if (parsed.photos && typeof parsed.photos === 'object') {
+                    Object.keys(parsed.photos).forEach(pid => { photoPut(pid, parsed.photos[pid]); });
+                }
                 normalizeWeekdayRoutines();
                 syncAll();
                 showToast('✅ 백업 데이터를 불러왔어요');
@@ -1987,7 +2313,9 @@
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
     // ══════════ 초기화 ══════════
-    window.onload = () => {
+    window.onload = async () => {
+        await photoLoadAll();
+        migrateMemosToStore();
         renderHome();
         renderCheckTab();
         renderRoutineMng();
