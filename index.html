@@ -153,6 +153,7 @@
         .memo-view-text { font-size: 15px; line-height: 1.7; color: var(--text); white-space: pre-wrap; word-break: break-word; }
         .memo-view-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
         .memo-view-photos img { width: calc(50% - 4px); border-radius: 10px; cursor: pointer; }
+        .cnt { color: var(--gray); font-weight: normal; font-size: 12px; }
         .memo-view-link { display: inline-block; background: var(--primary-tint); color: var(--primary-dark); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
         .photo-add-wrap { position: relative; width: 100%; height: 42px; }
         .photo-add-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px dashed #ccc; border-radius: 9px; color: #888; font-size: 13px; font-weight: bold; background: #fafafa; pointer-events: none; }
@@ -292,7 +293,7 @@
         </div>
 
         <div class="card mpanel" id="mpanel-routine">
-            <div class="section-title">💚 내 루틴</div>
+            <div class="section-title">💚 내 루틴 <span id="cntRoutine" class="cnt"></span></div>
             <div class="form-row">
                 <input type="text" id="newRoutineEmoji" placeholder="🌅" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
                 <input type="text" id="newRoutineName" placeholder="루틴 이름 (예: 아침 스트레칭)" style="flex:1;">
@@ -302,14 +303,14 @@
         </div>
 
         <div class="card mpanel" id="mpanel-project" style="display:none;">
-            <div class="section-title">📁 프로젝트 · 일정</div>
+            <div class="section-title">📁 프로젝트 · 일정 <span id="cntProject" class="cnt"></span></div>
             <button class="btn btn-ghost btn-sm" style="width:100%;" onclick="openProjectModal()">+ 새 프로젝트 / 일정 추가</button>
             <input type="text" id="projSearch" placeholder="🔍 프로젝트 이름 검색" oninput="renderProjectMng()" style="margin-top:8px;">
             <div id="projectMngList" style="margin-top:10px;"></div>
         </div>
 
         <div class="card mpanel" id="mpanel-cycle" style="display:none;">
-            <div class="section-title">🔁 순환 루틴</div>
+            <div class="section-title">🔁 순환 루틴 <span id="cntCycle" class="cnt"></span></div>
             <p style="font-size:11px; color:#999; margin:0 0 8px; line-height:1.5;">리스트를 하루에 하나씩 순서대로 순환해요. (예: 신발 돌려신기)</p>
             <div class="form-row">
                 <input type="text" id="newCycleEmoji" placeholder="👟" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
@@ -320,7 +321,7 @@
         </div>
 
         <div class="card mpanel" id="mpanel-weekday" style="display:none;">
-            <div class="section-title">📅 요일 루틴</div>
+            <div class="section-title">📅 요일 루틴 <span id="cntWeekday" class="cnt"></span></div>
             <p style="font-size:11px; color:#999; margin:0 0 8px; line-height:1.5;">요일마다 다른 항목이 떠요. (예: 화=상체, 수=러닝)</p>
             <div class="form-row">
                 <input type="text" id="newWeekdayEmoji" placeholder="💪" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
@@ -1111,7 +1112,8 @@
 
         // 💚 루틴 (전날·기준일 상태 나란히)
         if (routines.length || cycleRoutines.length || weekdayRoutines.length) {
-            html += '<div class="brief-sec-title">💚 루틴</div>';
+            const rcB = routineDayStatus(ref);
+            html += `<div class="brief-sec-title">💚 루틴 <span class="cnt">(${rcB.done}/${rcB.total})</span></div>`;
             html += routines.map(r => {
                 const yD = (r.checkHistory || []).includes(y);
                 const tD = (r.checkHistory || []).includes(ref);
@@ -1238,7 +1240,9 @@
         document.getElementById('checkDateLabel').textContent = isToday ? `오늘 · ${krLabel(checkDateStr)}` : (isFuture ? `예정 · ${krLabel(checkDateStr)}` : krLabel(checkDateStr));
         document.getElementById('checkDateNext').style.visibility = 'visible';
         document.getElementById('checkTodayBtn').disabled = isToday;
-        document.getElementById('routineChecklistTitle').textContent = isToday ? '오늘의 루틴' : '이 날의 루틴';
+        const rc = routineDayStatus(checkDateStr);
+        document.getElementById('routineChecklistTitle').innerHTML =
+            `${isToday ? '오늘의 루틴' : '이 날의 루틴'} <span class="cnt">(${rc.done}/${rc.total})</span>`;
         const editable = isCheckable(checkDateStr);
 
         // 루틴 체크리스트 (일반 루틴 + 순환 루틴)
@@ -1302,7 +1306,8 @@
 
         // 프로젝트 영역
         if (activeProjects.length > 0) {
-            html += '<div class="task-group"><div class="task-group-title">📁 프로젝트 할 일</div>';
+            const pAll = activeProjects.reduce((acc, p) => acc.concat((p.tasks || []).filter(t => t.date === checkDateStr)), []);
+            html += `<div class="task-group"><div class="task-group-title">📁 프로젝트 할 일 <span class="cnt">(${pAll.filter(t => t.done).length}/${pAll.length})</span></div>`;
             activeProjects.forEach(p => {
                 const dayTasks = (p.tasks || []).filter(t => t.date === checkDateStr);
                 const allDone = dayTasks.length > 0 && dayTasks.every(t => t.done);
@@ -1310,7 +1315,7 @@
                     ? `<button class="bulk-btn ${allDone?'on':''}" onclick="toggleProjectDay(${p.id})">${allDone ? '전체 해제' : '모두 완료'}</button>`
                     : '';
                 html += '<div class="proj-block">';
-                html += `<div class="proj-header"><span class="proj-color-dot" style="background:${p.color};"></span><span class="check-emoji">${p.emoji||'📁'}</span><span style="flex:1;">${escapeHtml(p.name)}</span>${bulkBtn}</div>`;
+                html += `<div class="proj-header"><span class="proj-color-dot" style="background:${p.color};"></span><span class="check-emoji">${p.emoji||'📁'}</span><span style="flex:1;">${escapeHtml(p.name)} <span class="cnt">(${dayTasks.filter(t => t.done).length}/${dayTasks.length})</span></span>${bulkBtn}</div>`;
                 html += `<button class="mini-add" style="margin-top:6px; margin-bottom:6px;" onclick="openTaskModal(${p.id})">+ 할 일 추가</button>`;
                 dayTasks.forEach(t => { html += taskRow(p.name, p.id, t); });
                 html += '</div>';
@@ -1323,7 +1328,7 @@
         const sBulk = (dayStandalone.length > 0 && editable)
             ? `<button class="bulk-btn ${sAllDone?'on':''}" style="margin-left:auto;" onclick="toggleStandaloneDay()">${sAllDone ? '전체 해제' : '모두 완료'}</button>`
             : '';
-        html += `<div class="task-group"><div class="task-group-title">📝 단독 할 일${sBulk}</div>`;
+        html += `<div class="task-group"><div class="task-group-title">📝 단독 할 일 <span class="cnt">(${dayStandalone.filter(t => t.done).length}/${dayStandalone.length})</span>${sBulk}</div>`;
         html += '<div class="standalone-block">';
         html += '<button class="mini-add" style="margin-top:4px; margin-bottom:6px;" onclick="openTaskModal(null)">+ 단독 할 일 추가</button>';
         if (dayStandalone.length > 0) {
@@ -1394,6 +1399,7 @@
         });
     }
     function renderRoutineMng() {
+        document.getElementById('cntRoutine').textContent = `(${routines.length})`;
         const el = document.getElementById('routineMngList');
         if (routines.length === 0) { el.innerHTML = '<div class="empty">등록된 루틴이 없어요</div>'; return; }
         el.innerHTML = routines.map(r => `
@@ -1566,6 +1572,7 @@
         showToast(`✅ 제외 날짜 ${it.excludeDates.length}일이 저장됐어요`);
     }
     function renderCycleMng() {
+        document.getElementById('cntCycle').textContent = `(${cycleRoutines.length})`;
         const el = document.getElementById('cycleMngList');
         if (cycleRoutines.length === 0) { el.innerHTML = '<div class="empty">등록된 순환 루틴이 없어요</div>'; return; }
         el.innerHTML = cycleRoutines.map(cr => {
@@ -1623,6 +1630,7 @@
         saveToStorage(); // 입력 중 리렌더 방지: 저장만
     }
     function renderWeekdayMng() {
+        document.getElementById('cntWeekday').textContent = `(${weekdayRoutines.length})`;
         const el = document.getElementById('weekdayMngList');
         if (weekdayRoutines.length === 0) { el.innerHTML = '<div class="empty">등록된 요일 루틴이 없어요</div>'; return; }
         el.innerHTML = weekdayRoutines.map(wr => {
@@ -1900,6 +1908,7 @@
         </div>`;
     }
     function renderProjectMng() {
+        document.getElementById('cntProject').textContent = `(${projects.length})`;
         const el = document.getElementById('projectMngList');
         if (projects.length === 0) { el.innerHTML = '<div class="empty">등록된 프로젝트가 없어요</div>'; return; }
 
