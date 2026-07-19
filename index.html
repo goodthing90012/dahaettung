@@ -549,7 +549,7 @@
     function todayRoutineStats() {
         const today = getTodayStr();
         let total = 0, done = 0;
-        routines.forEach(r => { total++; if ((r.checkHistory || []).includes(today)) done++; });
+        routines.forEach(r => { if (!routineActiveOnDay(r, today) && !(r.checkHistory || []).includes(today)) return; total++; if ((r.checkHistory || []).includes(today)) done++; });
         cycleRoutines.forEach(cr => { if (cr.items && cr.items.length && (cycleActiveOnDay(cr, today) || cycleDoneOn(cr, today))) { total++; if (cycleDoneOn(cr, today)) done++; } });
         weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, today)) { total++; if (weekdayIsDone(wr, today)) done++; } });
         return { done, total };
@@ -663,7 +663,7 @@
             const hasIncompleteTask = standaloneTasks.some(t => t.date === dateStr && !t.done)
                 || projects.some(p => (p.tasks || []).some(t => t.date === dateStr && !t.done));
             const hasIncompleteRoutineToday = isToday && (
-                routines.some(r => !(r.checkHistory || []).includes(dateStr))
+                routines.some(r => routineActiveOnDay(r, dateStr) && !(r.checkHistory || []).includes(dateStr))
                 || weekdayRoutines.some(wr => weekdayDisplayItem(wr, dateStr) && !weekdayIsDone(wr, dateStr))
                 || cycleRoutines.some(cr => cr.items && cr.items.length && cycleActiveOnDay(cr, dateStr) && !cycleDoneOn(cr, dateStr))
             );
@@ -780,12 +780,25 @@
         const h = (cr.history || []).find(x => x.date === dateStr);
         return h ? h.item : null;
     }
+    // 공용: 그 항목이 해당 날짜에 활성인지 (요일 제외 + 날짜 제외)
+    function itemActiveOnDay(item, dateStr) {
+        if (item.excludeDates && item.excludeDates.includes(dateStr)) return false;
+        if (!item.activeDays) return true;
+        const dow = new Date(parseDate(dateStr)).getDay();
+        return item.activeDays[dow] !== false;
+    }
     // 순환 루틴: 그 요일에 활성인지 (activeDays 없으면 매일 활성)
     function cycleActiveOnDay(cr, dateStr) {
-        if (cr.excludeDates && cr.excludeDates.includes(dateStr)) return false;
-        if (!cr.activeDays) return true;
-        const dow = new Date(parseDate(dateStr)).getDay();
-        return cr.activeDays[dow] !== false;
+        return itemActiveOnDay(cr, dateStr);
+    }
+    // 일반 루틴: 그날 대상인지
+    function routineActiveOnDay(r, dateStr) {
+        return itemActiveOnDay(r, dateStr);
+    }
+    // 요일 루틴: 그날 항목이 있고 제외 날짜가 아닌지
+    function weekdayActiveOnDay(wr, dateStr) {
+        if (wr.excludeDates && wr.excludeDates.includes(dateStr)) return false;
+        return true;
     }
     // 요일 루틴: 그날 요일에 지정된 항목 (현재 요일표 기준)
     function weekdayItemOn(wr, dateStr) {
@@ -802,6 +815,7 @@
     function weekdayDisplayItem(wr, dateStr) {
         const rec = weekdayRecord(wr, dateStr);
         if (rec) return rec.item || weekdayItemOn(wr, dateStr) || '';
+        if (wr.excludeDates && wr.excludeDates.includes(dateStr)) return null;
         return weekdayItemOn(wr, dateStr);
     }
     // 구버전(날짜 문자열 배열) → {date, item} 형식으로 변환
@@ -817,7 +831,7 @@
     // 특정 날짜의 모든 항목 (루틴 + 순환 + 요일 + 할 일) + 완료 여부
     function collectDayItems(dateStr) {
         const items = [];
-        routines.forEach(r => items.push({ name: r.name, done: (r.checkHistory || []).includes(dateStr) }));
+        routines.forEach(r => { const d = (r.checkHistory || []).includes(dateStr); if (!routineActiveOnDay(r, dateStr) && !d) return; items.push({ name: r.name, done: d }); });
         cycleRoutines.forEach(cr => {
             const rec = cycleDoneOn(cr, dateStr);
             if (rec) items.push({ name: `${cr.name}: ${rec}`, done: true });
@@ -1018,6 +1032,7 @@
         const rEl = document.getElementById('routineChecklist');
         let rHtml = routines.map(r => {
             const done = (r.checkHistory || []).includes(checkDateStr);
+            if (!routineActiveOnDay(r, checkDateStr) && !done) return '';
             return `<div class="check-item">
                 <div class="check-box ${done?'done':''}" onclick="toggleRoutine(${r.id})">${done?'✓':''}</div>
                 <span class="check-emoji">${r.emoji||'💚'}</span>
@@ -1169,15 +1184,19 @@
         const el = document.getElementById('routineMngList');
         if (routines.length === 0) { el.innerHTML = '<div class="empty">등록된 루틴이 없어요</div>'; return; }
         el.innerHTML = routines.map(r => `
-            <div class="mng-item">
-                <div class="mng-info">
-                    <div class="mng-name"><span class="check-emoji">${r.emoji||'💚'}</span> ${escapeHtml(r.name)}</div>
-                    <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료</div>
+            <div class="mng-item" style="flex-direction:column; align-items:stretch; gap:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="mng-info">
+                        <div class="mng-name"><span class="check-emoji">${r.emoji||'💚'}</span> ${escapeHtml(r.name)}</div>
+                        <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료</div>
+                    </div>
+                    <div class="mng-actions">
+                        <button class="icon-btn" onclick="editRoutine(${r.id})">수정</button>
+                        <button class="icon-btn del" onclick="deleteRoutine(${r.id})">삭제</button>
+                    </div>
                 </div>
-                <div class="mng-actions">
-                    <button class="icon-btn" onclick="editRoutine(${r.id})">수정</button>
-                    <button class="icon-btn del" onclick="deleteRoutine(${r.id})">삭제</button>
-                </div>
+                ${dayChipsHtml('routine', r)}
+                ${excludeSectionHtml('routine', r)}
             </div>`).join('');
     }
 
@@ -1240,29 +1259,57 @@
         }
         syncAll();
     }
-    // ── 순환 루틴 제외 날짜 ──
-    function renderExcludeChips(cr) {
+    // ── 제외 설정 공용 (일반/순환 루틴 = 요일+날짜, 요일 루틴 = 날짜만) ──
+    function routineArrOf(kind) {
+        return kind === 'cycle' ? cycleRoutines : kind === 'weekday' ? weekdayRoutines : routines;
+    }
+    function dayChipsHtml(kind, item) {
+        return `<div>
+            <div style="font-size:11px; color:var(--gray); font-weight:bold; margin-bottom:4px;">적용 요일 (끄면 그날은 안 떠요)</div>
+            <div style="display:flex; gap:4px;">
+                ${DOW_ORDER.map(d => {
+                    const on = !item.activeDays || item.activeDays[d] !== false;
+                    return `<button class="dow-chip ${on?'on':''}" onclick="toggleItemDay('${kind}',${item.id},${d})">${DOW_LABELS[d]}</button>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }
+    function excludeSectionHtml(kind, item) {
+        return `<div style="margin-top:6px;">
+            <div style="font-size:11px; color:var(--gray); font-weight:bold; margin-bottom:4px;">제외 날짜 (연차·휴일 등)</div>
+            ${renderExcludeChips(kind, item)}
+            <button class="memo-add" style="width:100%;" onclick="openExcludeModal('${kind}',${item.id})">+ 제외 날짜 선택</button>
+        </div>`;
+    }
+    function toggleItemDay(kind, id, dow) {
+        const it = routineArrOf(kind).find(x => x.id === id); if (!it) return;
+        if (!it.activeDays) it.activeDays = {0:true,1:true,2:true,3:true,4:true,5:true,6:true};
+        it.activeDays[dow] = it.activeDays[dow] === false;
+        syncAll();
+    }
+    function renderExcludeChips(kind, cr) {
         const today = getTodayStr();
         // 지나간 날짜는 숨김 (데이터는 유지)
         const upcoming = (cr.excludeDates || []).filter(d => d >= today).sort();
         if (upcoming.length === 0) return '<div style="font-size:11px; color:#bbb; padding:2px 0 4px;">예정된 제외 날짜가 없어요</div>';
         const shown = upcoming.slice(0, 8);
         let html = '<div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px;">';
-        html += shown.map(d => `<span class="exc-chip">${d.slice(5).replace('-', '/')}<span onclick="removeExcludeDate(${cr.id},'${d}')" style="cursor:pointer; color:var(--danger); font-weight:bold;">✕</span></span>`).join('');
+        html += shown.map(d => `<span class="exc-chip">${d.slice(5).replace('-', '/')}<span onclick="removeExcludeDate('${kind}',${cr.id},'${d}')" style="cursor:pointer; color:var(--danger); font-weight:bold;">✕</span></span>`).join('');
         if (upcoming.length > shown.length) html += `<span class="exc-chip" style="color:#999;">+${upcoming.length - shown.length}일</span>`;
         html += '</div>';
         return html;
     }
-    function removeExcludeDate(id, dateStr) {
-        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
-        cr.excludeDates = (cr.excludeDates || []).filter(d => d !== dateStr);
+    function removeExcludeDate(kind, id, dateStr) {
+        const it = routineArrOf(kind).find(x => x.id === id); if (!it) return;
+        it.excludeDates = (it.excludeDates || []).filter(d => d !== dateStr);
         syncAll();
     }
-    let excludeTargetId = null, excWorking = [], excCalYear = 0, excCalMonth = 0;
-    function openExcludeModal(id) {
-        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
+    let excludeTargetId = null, excludeTargetKind = 'cycle', excWorking = [], excCalYear = 0, excCalMonth = 0;
+    function openExcludeModal(kind, id) {
+        const it = routineArrOf(kind).find(x => x.id === id); if (!it) return;
+        excludeTargetKind = kind;
         excludeTargetId = id;
-        excWorking = (cr.excludeDates || []).slice(); // 작업용 복사본
+        excWorking = (it.excludeDates || []).slice(); // 작업용 복사본
         const now = new Date();
         excCalYear = now.getFullYear(); excCalMonth = now.getMonth();
         renderExcludeCalendar();
@@ -1299,17 +1346,11 @@
         document.getElementById('excSelCount').textContent = `선택된 제외 날짜 ${excWorking.length}일 (예정 ${upcoming}일)`;
     }
     function saveExcludeDates() {
-        const cr = cycleRoutines.find(x => x.id === excludeTargetId); if (!cr) return;
-        cr.excludeDates = excWorking.slice().sort();
+        const it = routineArrOf(excludeTargetKind).find(x => x.id === excludeTargetId); if (!it) return;
+        it.excludeDates = excWorking.slice().sort();
         closeOverlay('excludeOverlay');
         syncAll();
-        showToast(`✅ 제외 날짜 ${cr.excludeDates.length}일이 저장됐어요`);
-    }
-    function toggleCycleDay(id, dow) {
-        const cr = cycleRoutines.find(x => x.id === id); if (!cr) return;
-        if (!cr.activeDays) cr.activeDays = {0:true,1:true,2:true,3:true,4:true,5:true,6:true};
-        cr.activeDays[dow] = cr.activeDays[dow] === false;
-        syncAll();
+        showToast(`✅ 제외 날짜 ${it.excludeDates.length}일이 저장됐어요`);
     }
     function renderCycleMng() {
         const el = document.getElementById('cycleMngList');
@@ -1337,20 +1378,8 @@
                     <input type="text" id="cycleItemInput_${cr.id}" placeholder="항목 추가 (예: 아식스)" style="flex:1;">
                     <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;" onclick="addCycleItem(${cr.id})">추가</button>
                 </div>
-                <div style="margin-top:6px;">
-                    <div style="font-size:11px; color:var(--gray); font-weight:bold; margin-bottom:4px;">적용 요일 (끄면 그날은 안 떠요)</div>
-                    <div style="display:flex; gap:4px;">
-                        ${DOW_ORDER.map(d => {
-                            const on = !cr.activeDays || cr.activeDays[d] !== false;
-                            return `<button class="dow-chip ${on?'on':''}" onclick="toggleCycleDay(${cr.id},${d})">${DOW_LABELS[d]}</button>`;
-                        }).join('')}
-                    </div>
-                </div>
-                <div style="margin-top:8px;">
-                    <div style="font-size:11px; color:var(--gray); font-weight:bold; margin-bottom:4px;">제외 날짜 (연차·휴일 등)</div>
-                    ${renderExcludeChips(cr)}
-                    <button class="memo-add" style="width:100%;" onclick="openExcludeModal(${cr.id})">+ 제외 날짜 선택</button>
-                </div>
+                ${dayChipsHtml('cycle', cr)}
+                ${excludeSectionHtml('cycle', cr)}
             </div>`;
         }).join('');
     }
@@ -1399,6 +1428,7 @@
                     </div>
                 </div>
                 <div style="margin-top:2px;">${rows}</div>
+                ${excludeSectionHtml('weekday', wr)}
             </div>`;
         }).join('');
     }
@@ -1545,7 +1575,7 @@
     function routineDayStatus(dateStr) {
         const isToday = dateStr === getTodayStr();
         let total = 0, done = 0;
-        routines.forEach(r => { total++; if ((r.checkHistory || []).includes(dateStr)) done++; });
+        routines.forEach(r => { const d = (r.checkHistory || []).includes(dateStr); if (!routineActiveOnDay(r, dateStr) && !d) return; total++; if (d) done++; });
         weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, dateStr)) { total++; if (weekdayIsDone(wr, dateStr)) done++; } });
         cycleRoutines.forEach(cr => {
             if (!cr.items || !cr.items.length) return;
@@ -1565,6 +1595,7 @@
         routines.forEach(r => {
             r.checkHistory = r.checkHistory || [];
             const has = r.checkHistory.includes(checkDateStr);
+            if (!routineActiveOnDay(r, checkDateStr) && !has) return;
             if (makeDone && !has) r.checkHistory.push(checkDateStr);
             if (!makeDone && has) r.checkHistory = r.checkHistory.filter(d => d !== checkDateStr);
         });
