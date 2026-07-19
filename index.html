@@ -166,13 +166,6 @@
         .memo-view-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
         .memo-view-photos img { width: calc(50% - 4px); border-radius: 10px; cursor: pointer; }
         .cnt { color: var(--gray); font-weight: normal; font-size: 12px; }
-        .photo-counter { color: #fff; font-size: 13px; font-weight: bold; margin-bottom: 10px; opacity: 0.9; }
-        .photo-stage { position: relative; display: flex; align-items: center; justify-content: center; width: 100%; max-width: 560px; }
-        .photo-stage img { max-width: 88%; max-height: 74vh; border-radius: 10px; touch-action: pan-y; }
-        .photo-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: none; border-radius: 50%; background: rgba(255,255,255,0.22); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
-        .photo-nav.prev { left: 0; }
-        .photo-nav.next { right: 0; }
-        .photo-hint { color: rgba(255,255,255,0.55); font-size: 11px; margin-top: 14px; text-align: center; padding: 0 20px; }
         .memo-view-link { display: inline-block; background: var(--primary-tint); color: var(--primary-dark); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
         .photo-add-wrap { position: relative; width: 100%; height: 42px; }
         .photo-add-face { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px dashed #ccc; border-radius: 9px; color: #888; font-size: 13px; font-weight: bold; background: #fafafa; pointer-events: none; }
@@ -2260,7 +2253,12 @@
             const t = e.changedTouches[0];
             const dx = t.clientX - startX, dy = t.clientY - startY;
             if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { movePhoto(dx < 0 ? 1 : -1); return; }
-            if (!moved) closeOverlay('photoViewer'); // 그냥 탭하면 닫기
+            // 사진·버튼 위 탭은 유지, 바깥 여백만 닫기
+            if (!moved) {
+                const el = document.elementFromPoint(t.clientX, t.clientY);
+                const onContent = el && (el.id === 'photoViewerImg' || el.closest('.pv-nav') || el.closest('.pv-close'));
+                if (!onContent) closeOverlay('photoViewer');
+            }
         }, { passive: true });
     })();
     function changeMemoMonth(dir) {
