@@ -509,6 +509,7 @@
         </div>
         <div class="brief-footer">
             <button class="brief-close-btn" onclick="deleteMemoFromView()">삭제</button>
+            <button class="brief-close-btn" style="background:var(--primary-tint); color:var(--primary-dark);" onclick="linkMemoFromView()">연결</button>
             <button class="brief-copy-btn" onclick="editMemoFromView()">수정</button>
         </div>
     </div>
@@ -2099,6 +2100,9 @@
             .map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}')">`).join('');
         openOverlay('memoViewOverlay');
     }
+    function linkMemoFromView() {
+        openLinkModal(viewingMemoId);
+    }
     function editMemoFromView() {
         const id = viewingMemoId;
         closeOverlay('memoViewOverlay');
@@ -2269,6 +2273,7 @@
         closeOverlay('linkOverlay');
         syncAll();
         renderMemoTab();
+        if (document.getElementById('memoViewOverlay').classList.contains('active')) openMemoView(m.id);
         showToast('🔗 연결했어요');
     }
     function unlinkMemo() {
@@ -2277,6 +2282,7 @@
         syncAll();
         renderLinkList();
         renderMemoTab();
+        if (document.getElementById('memoViewOverlay').classList.contains('active')) openMemoView(m.id);
         showToast('연결을 해제했어요');
     }
     function renderMemoTab() {
