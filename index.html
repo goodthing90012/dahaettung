@@ -308,7 +308,23 @@
                 <input type="text" id="newRoutineEmoji" placeholder="🌅" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
                 <input type="text" id="newRoutineName" placeholder="루틴 이름 (예: 아침 스트레칭)" style="flex:1;">
             </div>
-            <button class="btn btn-primary btn-sm" onclick="addRoutine()">루틴 추가</button>
+            <div style="margin-top:2px;">
+                <div style="font-size:12px; color:var(--gray); font-weight:bold; margin-bottom:4px;">완료 주기 <span style="font-weight:normal; color:#aaa;">(안 고르면 매일)</span></div>
+                <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+                    <select id="newRoutineCycleWeeks" style="flex:0 0 auto;" onchange="onCycleWeeksSelChange('newRoutineCycleWeeks','newRoutineCycleWeeksWrap')">
+                        <option value="1">매주</option>
+                        <option value="2">격주</option>
+                        <option value="custom">직접 입력</option>
+                    </select>
+                    <span id="newRoutineCycleWeeksWrap" style="display:none; align-items:center; gap:4px;">
+                        <input type="number" id="newRoutineCycleWeeksInput" min="2" placeholder="3" inputmode="numeric" style="width:56px;">
+                        <span style="font-size:12px; color:var(--gray);">주마다</span>
+                    </span>
+                    <span style="font-size:12px; color:var(--gray);">이 요일에 리셋 →</span>
+                </div>
+                <div id="newRoutineCycleChips" style="display:flex; gap:4px;"></div>
+            </div>
+            <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="addRoutine()">루틴 추가</button>
             <div id="routineMngList" style="margin-top:10px;"></div>
         </div>
 
@@ -393,6 +409,22 @@
         <div class="form-row">
             <input type="text" id="editRoutineEmoji" maxlength="2" style="width:52px; text-align:center; flex:0 0 52px;">
             <input type="text" id="editRoutineName" placeholder="루틴 이름" style="flex:1;">
+        </div>
+        <div id="editRoutineCycleRow" style="margin-top:4px;">
+            <div style="font-size:12px; color:var(--gray); font-weight:bold; margin-bottom:4px;">완료 주기 <span style="font-weight:normal; color:#aaa;">(안 고르면 매일)</span></div>
+            <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+                <select id="editRoutineCycleWeeks" style="flex:0 0 auto;" onchange="onCycleWeeksSelChange('editRoutineCycleWeeks','editRoutineCycleWeeksWrap')">
+                    <option value="1">매주</option>
+                    <option value="2">격주</option>
+                    <option value="custom">직접 입력</option>
+                </select>
+                <span id="editRoutineCycleWeeksWrap" style="display:none; align-items:center; gap:4px;">
+                    <input type="number" id="editRoutineCycleWeeksInput" min="2" placeholder="3" inputmode="numeric" style="width:56px;">
+                    <span style="font-size:12px; color:var(--gray);">주마다</span>
+                </span>
+                <span style="font-size:12px; color:var(--gray);">이 요일에 리셋 →</span>
+            </div>
+            <div id="editRoutineCycleChips" style="display:flex; gap:4px;"></div>
         </div>
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('routineEditOverlay')">취소</button>
@@ -752,7 +784,7 @@
     }
     function isRoutineDayAllClear(dateStr) {
         if (routines.length === 0) return false;
-        return routines.every(r => (r.checkHistory || []).includes(dateStr));
+        return routines.every(r => routineSatisfiedOn(r, dateStr));
     }
     function countRoutineDone(dateStr) {
         return routines.filter(r => (r.checkHistory || []).includes(dateStr)).length;
@@ -761,7 +793,7 @@
     function todayRoutineStats() {
         const today = getTodayStr();
         let total = 0, done = 0;
-        routines.forEach(r => { if (!routineActiveOnDay(r, today) && !(r.checkHistory || []).includes(today)) return; total++; if ((r.checkHistory || []).includes(today)) done++; });
+        routines.forEach(r => { const st = routineCheckState(r, today); if (st === 'off') return; total++; if (st === 'checked' || st === 'covered') done++; });
         cycleRoutines.forEach(cr => { if (cr.items && cr.items.length && (cycleActiveOnDay(cr, today) || cycleDoneOn(cr, today))) { total++; if (cycleDoneOn(cr, today)) done++; } });
         weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, today)) { total++; if (weekdayIsDone(wr, today)) done++; } });
         return { done, total };
@@ -877,7 +909,7 @@
             const hasIncompleteTask = standaloneTasks.some(t => t.date === dateStr && !t.done)
                 || projects.some(p => (p.tasks || []).some(t => t.date === dateStr && !t.done));
             const hasIncompleteRoutineToday = isToday && (
-                routines.some(r => routineActiveOnDay(r, dateStr) && !(r.checkHistory || []).includes(dateStr))
+                routines.some(r => routineCheckState(r, dateStr) === 'due')
                 || weekdayRoutines.some(wr => weekdayDisplayItem(wr, dateStr) && !weekdayIsDone(wr, dateStr))
                 || cycleRoutines.some(cr => cr.items && cr.items.length && cycleActiveOnDay(cr, dateStr) && !cycleDoneOn(cr, dateStr))
             );
@@ -1024,6 +1056,52 @@
     function routineActiveOnDay(r, dateStr) {
         return itemActiveOnDay(r, dateStr);
     }
+    // ── 완료 주기(기준 요일) 루틴 헬퍼 ──
+    // cycleWeekday(0=일~6=토)를 정하면 그 요일마다 리셋되는 주간 루틴이 됨. cycleWeeks=간격(1=매주,2=격주).
+    // 창(window) 안엔 아무 날 한 번만 체크하면 "달성"으로 처리되고, 다음 기준 요일에 다시 뜸.
+    function routineHasCycle(r) { return r && typeof r.cycleWeekday === 'number' && r.cycleWeekday >= 0 && r.cycleWeekday <= 6; }
+    function routineCycleWeeks(r) { const n = parseInt(r && r.cycleWeeks, 10); return (n && n > 0) ? n : 1; }
+    // dateStr 기준, 그 이하(=이전)의 가장 최근 '기준 요일' 날짜 (창의 시작)
+    function cycleAnchorStart(dateStr, wd) {
+        const dow = new Date(parseDate(dateStr)).getDay();
+        const back = (dow - wd + 7) % 7;
+        return addDaysStr(dateStr, -back);
+    }
+    function routineLastCheckOnOrBefore(r, dateStr) {
+        const h = (r.checkHistory || []).filter(d => d <= dateStr);
+        return h.length ? h.reduce((a, b) => a > b ? a : b) : null;
+    }
+    // 다시 떠야 하는 날 (마지막 체크가 속한 창의 시작 + 간격주). 항상 기준 요일에 떨어짐.
+    function routineNextDue(r, dateStr) {
+        if (!routineHasCycle(r)) return null;
+        const last = routineLastCheckOnOrBefore(r, dateStr);
+        if (!last) return null;
+        const cs = cycleAnchorStart(last, r.cycleWeekday);
+        return addDaysStr(cs, routineCycleWeeks(r) * 7);
+    }
+    // 그날, 이전 체크의 유효 창 안이라 "쉬어도 되는(달성)" 상태인가
+    function routineCycleCovered(r, dateStr) {
+        if (!routineHasCycle(r)) return false;
+        if ((r.checkHistory || []).includes(dateStr)) return false; // 그날 직접 체크는 checked
+        const due = routineNextDue(r, dateStr);
+        return !!due && dateStr < due;
+    }
+    // 그날 상태: 'checked' | 'covered' | 'due' | 'off'
+    function routineCheckState(r, dateStr) {
+        if ((r.checkHistory || []).includes(dateStr)) return 'checked';
+        if (routineHasCycle(r)) return routineCycleCovered(r, dateStr) ? 'covered' : 'due';
+        return routineActiveOnDay(r, dateStr) ? 'due' : 'off';
+    }
+    function routineSatisfiedOn(r, dateStr) {
+        const st = routineCheckState(r, dateStr);
+        return st === 'checked' || st === 'covered';
+    }
+    function routineCycleLabel(r) {
+        if (!routineHasCycle(r)) return '';
+        const wk = routineCycleWeeks(r);
+        const pre = wk === 1 ? '매주' : wk === 2 ? '격주' : `${wk}주마다`;
+        return `${pre} ${DOW_LABELS[r.cycleWeekday]} 리셋`;
+    }
     // 요일 루틴: 그날 항목이 있고 제외 날짜가 아닌지
     function weekdayActiveOnDay(wr, dateStr) {
         if (wr.excludeDates && wr.excludeDates.includes(dateStr)) return false;
@@ -1060,7 +1138,7 @@
     // 특정 날짜의 모든 항목 (루틴 + 순환 + 요일 + 할 일) + 완료 여부
     function collectDayItems(dateStr) {
         const items = [];
-        routines.forEach(r => { const d = (r.checkHistory || []).includes(dateStr); if (!routineActiveOnDay(r, dateStr) && !d) return; items.push({ name: r.name, done: d }); });
+        routines.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'off' || st === 'covered') return; items.push({ name: r.name, done: st === 'checked' }); });
         cycleRoutines.forEach(cr => {
             const rec = cycleDoneOn(cr, dateStr);
             if (rec) items.push({ name: `${cr.name}: ${rec}`, done: true });
@@ -1304,12 +1382,25 @@
         // 루틴 체크리스트 (일반 루틴 + 순환 루틴)
         const rEl = document.getElementById('routineChecklist');
         let rHtml = routines.map(r => {
-            const done = (r.checkHistory || []).includes(checkDateStr);
-            if (!routineActiveOnDay(r, checkDateStr) && !done) return '';
+            const st = routineCheckState(r, checkDateStr);
+            if (st === 'off') return '';
+            if (st === 'covered') {
+                // 이번 주기 완료 → 다음 기준 요일에 다시 뜸. 안내만 표시(탭 없음).
+                const due = routineNextDue(r, checkDateStr);
+                const left = due ? Math.max(0, Math.round((parseDate(due) - parseDate(checkDateStr)) / 86400000)) : 0;
+                const note = left > 0 ? `${DOW_LABELS[r.cycleWeekday]}요일 리셋까지 ${left}일` : '오늘까지';
+                return `<div class="check-item" style="opacity:.6;">
+                    <div class="check-box done" style="background:#cfe9dc; border-color:#cfe9dc; cursor:default;">✓</div>
+                    <span class="check-emoji">${r.emoji||'💚'}</span>
+                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#8aa;">· 이번 주기 완료 · ${note}</span></span>
+                </div>`;
+            }
+            const done = st === 'checked';
+            const cycTag = routineHasCycle(r) ? ` <span style="font-size:11px; color:#c99;">· ${routineCycleLabel(r)}</span>` : '';
             return `<div class="check-item">
                 <div class="check-box ${done?'done':''}" onclick="toggleRoutine(${r.id})">${done?'✓':''}</div>
                 <span class="check-emoji">${r.emoji||'💚'}</span>
-                <span class="check-name ${done?'done':''}">${escapeHtml(r.name)}</span>
+                <span class="check-name ${done?'done':''}">${escapeHtml(r.name)}${done?'':cycTag}</span>
             </div>`;
         }).join('');
 
@@ -1402,13 +1493,56 @@
     }
 
     // ══════════ 루틴 CRUD ══════════
+    // 완료 주기 요일 선택 상태 (null=매일)
+    let newRoutineCycleWd = null, editRoutineCycleWd = null;
+    function cycleChipsHtml(selected, handler) {
+        return DOW_ORDER.map(d =>
+            `<button class="dow-chip ${selected === d ? 'on' : ''}" onclick="${handler}(${d})">${DOW_LABELS[d]}</button>`
+        ).join('');
+    }
+    function renderNewRoutineCycleChips() {
+        const el = document.getElementById('newRoutineCycleChips');
+        if (el) el.innerHTML = cycleChipsHtml(newRoutineCycleWd, 'selectNewRoutineCycleWd');
+    }
+    function selectNewRoutineCycleWd(d) {
+        newRoutineCycleWd = (newRoutineCycleWd === d) ? null : d; // 같은 요일 다시 누르면 해제(=매일)
+        renderNewRoutineCycleChips();
+    }
+    function renderEditRoutineCycleChips() {
+        const el = document.getElementById('editRoutineCycleChips');
+        if (el) el.innerHTML = cycleChipsHtml(editRoutineCycleWd, 'selectEditRoutineCycleWd');
+    }
+    function selectEditRoutineCycleWd(d) {
+        editRoutineCycleWd = (editRoutineCycleWd === d) ? null : d;
+        renderEditRoutineCycleChips();
+    }
+    // '직접 입력' 선택 시 숫자 칸 표시 토글
+    function onCycleWeeksSelChange(selId, wrapId) {
+        const custom = document.getElementById(selId).value === 'custom';
+        document.getElementById(wrapId).style.display = custom ? 'inline-flex' : 'none';
+    }
+    // 선택 + 직접입력 값 → 주 간격 숫자
+    function readCycleWeeks(selId, inputId) {
+        const v = document.getElementById(selId).value;
+        if (v === 'custom') { const n = parseInt(document.getElementById(inputId).value, 10); return (n && n >= 2) ? n : 2; }
+        return parseInt(v, 10) || 1;
+    }
     function addRoutine() {
         const emoji = document.getElementById('newRoutineEmoji').value.trim() || '💚';
         const name = document.getElementById('newRoutineName').value.trim();
         if (!name) { showToast('루틴 이름을 입력해 주세요'); return; }
-        routines.push({ id: Date.now(), name, emoji, memos: [], checkHistory: [] });
+        const routine = { id: Date.now(), name, emoji, memos: [], checkHistory: [] };
+        if (newRoutineCycleWd !== null) {
+            routine.cycleWeekday = newRoutineCycleWd;
+            routine.cycleWeeks = readCycleWeeks('newRoutineCycleWeeks', 'newRoutineCycleWeeksInput');
+        }
+        routines.push(routine);
         document.getElementById('newRoutineEmoji').value = '';
         document.getElementById('newRoutineName').value = '';
+        document.getElementById('newRoutineCycleWeeks').value = '1';
+        document.getElementById('newRoutineCycleWeeksInput').value = '';
+        onCycleWeeksSelChange('newRoutineCycleWeeks', 'newRoutineCycleWeeksWrap');
+        newRoutineCycleWd = null; renderNewRoutineCycleChips();
         syncAll();
         showToast(`${emoji} [${name}] 루틴이 추가됐어요`);
     }
@@ -1427,6 +1561,19 @@
         editingRoutineRef = { kind, id };
         document.getElementById('editRoutineEmoji').value = r.emoji;
         document.getElementById('editRoutineName').value = r.name;
+        const cycRow = document.getElementById('editRoutineCycleRow');
+        if (kind === 'routine') {
+            cycRow.style.display = '';
+            editRoutineCycleWd = routineHasCycle(r) ? r.cycleWeekday : null;
+            const wk = routineCycleWeeks(r);
+            const sel = document.getElementById('editRoutineCycleWeeks');
+            if (wk === 1 || wk === 2) { sel.value = String(wk); }
+            else { sel.value = 'custom'; document.getElementById('editRoutineCycleWeeksInput').value = wk; }
+            onCycleWeeksSelChange('editRoutineCycleWeeks', 'editRoutineCycleWeeksWrap');
+            renderEditRoutineCycleChips();
+        } else {
+            cycRow.style.display = 'none';
+        }
         openOverlay('routineEditOverlay');
     }
     function editRoutine(id) { editRoutineGeneric('routine', id); }
@@ -1442,6 +1589,15 @@
         const fallback = kind === 'cycle' ? '🔁' : kind === 'weekday' ? '📅' : '💚';
         r.emoji = document.getElementById('editRoutineEmoji').value.trim() || fallback;
         r.name = name;
+        if (kind === 'routine') {
+            if (editRoutineCycleWd !== null) {
+                r.cycleWeekday = editRoutineCycleWd;
+                r.cycleWeeks = readCycleWeeks('editRoutineCycleWeeks', 'editRoutineCycleWeeksInput');
+            } else {
+                delete r.cycleWeekday; delete r.cycleWeeks;
+            }
+            delete r.cycleDays; // 구버전 필드 정리
+        }
         closeOverlay('routineEditOverlay');
         syncAll();
         showToast('✅ 루틴이 수정됐어요');
@@ -1455,15 +1611,16 @@
         });
     }
     function renderRoutineMng() {
+        renderNewRoutineCycleChips();
         document.getElementById('cntRoutine').textContent = `(${routines.length})`;
         const el = document.getElementById('routineMngList');
         if (routines.length === 0) { el.innerHTML = '<div class="empty">등록된 루틴이 없어요</div>'; return; }
-        el.innerHTML = routines.map(r => `
+        el.innerHTML = routines.slice().sort((a,b) => b.id - a.id).map(r => `
             <div class="mng-item" style="flex-direction:column; align-items:stretch; gap:6px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div class="mng-info">
                         <div class="mng-name"><span class="check-emoji">${r.emoji||'💚'}</span> ${escapeHtml(r.name)}</div>
-                        <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료</div>
+                        <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료${routineHasCycle(r) ? ` · 🔄 ${routineCycleLabel(r)}` : ''}</div>
                     </div>
                     <div class="mng-actions">
                         <button class="icon-btn" onclick="editRoutine(${r.id})">수정</button>
@@ -1631,7 +1788,7 @@
         document.getElementById('cntCycle').textContent = `(${cycleRoutines.length})`;
         const el = document.getElementById('cycleMngList');
         if (cycleRoutines.length === 0) { el.innerHTML = '<div class="empty">등록된 순환 루틴이 없어요</div>'; return; }
-        el.innerHTML = cycleRoutines.map(cr => {
+        el.innerHTML = cycleRoutines.slice().sort((a,b) => b.id - a.id).map(cr => {
             const c = cycleTodayItem(cr);
             const itemsHtml = cr.items.length ? cr.items.map((it, i) => `
                 <div class="cycle-item ${c && c.idx === i ? 'cur' : ''}">
@@ -1689,7 +1846,7 @@
         document.getElementById('cntWeekday').textContent = `(${weekdayRoutines.length})`;
         const el = document.getElementById('weekdayMngList');
         if (weekdayRoutines.length === 0) { el.innerHTML = '<div class="empty">등록된 요일 루틴이 없어요</div>'; return; }
-        el.innerHTML = weekdayRoutines.map(wr => {
+        el.innerHTML = weekdayRoutines.slice().sort((a,b) => b.id - a.id).map(wr => {
             const rows = DOW_ORDER.map(d => `
                 <div style="display:flex; align-items:center; gap:8px; padding:3px 0;">
                     <span style="width:20px; text-align:center; font-weight:bold; color:${d===0?'#E64980':d===6?'#4C6EF5':'#555'};">${DOW_LABELS[d]}</span>
@@ -1852,7 +2009,7 @@
     function routineDayStatus(dateStr) {
         const isToday = dateStr === getTodayStr();
         let total = 0, done = 0;
-        routines.forEach(r => { const d = (r.checkHistory || []).includes(dateStr); if (!routineActiveOnDay(r, dateStr) && !d) return; total++; if (d) done++; });
+        routines.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'off') return; total++; if (st === 'checked' || st === 'covered') done++; });
         weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, dateStr)) { total++; if (weekdayIsDone(wr, dateStr)) done++; } });
         cycleRoutines.forEach(cr => {
             if (!cr.items || !cr.items.length) return;
@@ -1972,9 +2129,9 @@
         const filtered = projects.filter(p => !q || p.name.toLowerCase().includes(q));
         if (filtered.length === 0) { el.innerHTML = '<div class="empty">검색 결과가 없어요</div>'; return; }
 
-        const sorted = filtered.slice().sort((a,b) => a.startDate.localeCompare(b.startDate));
+        const sorted = filtered.slice().sort((a,b) => b.id - a.id); // 최신(최근 추가) 먼저
         const active = sorted.filter(p => !projectIsDone(p));
-        const done = sorted.filter(p => projectIsDone(p)).reverse(); // 최근 완료 먼저
+        const done = sorted.filter(p => projectIsDone(p));
 
         let html = '';
         if (active.length) {
