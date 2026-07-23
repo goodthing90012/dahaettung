@@ -287,6 +287,13 @@
             <div id="routineChecklist"></div>
         </div>
 
+        <div class="card" id="cycleAreaCard" style="display:none;">
+            <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+                <span id="cycleAreaTitle">🔄 주기 루틴</span>
+            </div>
+            <div id="cycleAreaList"></div>
+        </div>
+
         <div class="card">
             <div class="section-title">📝 이 날 할 일</div>
             <div id="dayTaskList"></div>
@@ -793,7 +800,7 @@
     function todayRoutineStats() {
         const today = getTodayStr();
         let total = 0, done = 0;
-        routines.forEach(r => { const st = routineCheckState(r, today); if (st === 'off' || st === 'skipped') return; total++; if (st === 'checked' || st === 'covered') done++; });
+        routines.forEach(r => { const st = routineCheckState(r, today); if (st === 'off' || st === 'skipped' || st === 'pending' || st === 'covered') return; total++; if (st === 'checked') done++; });
         cycleRoutines.forEach(cr => { if (cr.items && cr.items.length && (cycleActiveOnDay(cr, today) || cycleDoneOn(cr, today))) { total++; if (cycleDoneOn(cr, today)) done++; } });
         weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, today)) { total++; if (weekdayIsDone(wr, today)) done++; } });
         return { done, total };
@@ -951,7 +958,7 @@
         }
         routines.forEach(r => {
             const st = routineCheckState(r, dateStr);
-            if (st === 'off' || st === 'skipped') return;
+            if (st === 'off' || st === 'skipped' || st === 'pending') return;
             const done = st === 'checked' || st === 'covered';
             rows += `<div class="detail-row" onclick="goToCheckDate('${dateStr}')">
                 <span>${done ? '💚' : '⬜'}</span>
@@ -1091,7 +1098,22 @@
         const cs = cycleAnchorStart(ev.date, r.cycleWeekday);
         return addDaysStr(cs, routineCycleWeeks(r) * 7);
     }
-    // 그날 상태: 'checked' | 'covered' | 'skipped' | 'due' | 'off'
+    // dateStr가 속한 현재 주기 창 {start, end}. end = 그 주기의 마지막 날(=마감일)
+    function routineWindow(r, dateStr) {
+        if (!routineHasCycle(r)) return null;
+        const n = routineCycleWeeks(r);
+        const ev = routineGoverningEvent(r, dateStr);
+        let start;
+        if (ev) {
+            start = addDaysStr(cycleAnchorStart(ev.date, r.cycleWeekday), n * 7);
+            while (addDaysStr(start, n * 7) <= dateStr) start = addDaysStr(start, n * 7);
+        } else {
+            start = cycleAnchorStart(dateStr, r.cycleWeekday);
+        }
+        return { start, end: addDaysStr(start, n * 7 - 1) };
+    }
+    // 그날 상태: 'checked' | 'covered' | 'skipped' | 'pending' | 'due' | 'off'
+    // 주기 루틴은 창 안엔 'pending'(올클리어 영향 없음), 창 마지막 날에만 'due'(마감 → 미완료로 잡힘)
     function routineCheckState(r, dateStr) {
         if ((r.checkHistory || []).includes(dateStr)) return 'checked';
         if (routineHasCycle(r)) {
@@ -1100,14 +1122,22 @@
                 const due = addDaysStr(cycleAnchorStart(ev.date, r.cycleWeekday), routineCycleWeeks(r) * 7);
                 if (dateStr < due) return ev.type === 'skip' ? 'skipped' : 'covered';
             }
-            return 'due';
+            const w = routineWindow(r, dateStr);
+            return (w && dateStr < w.end) ? 'pending' : 'due';
         }
         return routineActiveOnDay(r, dateStr) ? 'due' : 'off';
     }
-    // 달성/제외로 간주(미완료 아님): 체크·커버·건너뜀
+    // 달성/제외로 간주(미완료 아님): 체크·커버·건너뜀·주기 진행중
     function routineSatisfiedOn(r, dateStr) {
         const st = routineCheckState(r, dateStr);
-        return st === 'checked' || st === 'covered' || st === 'skipped';
+        return st === 'checked' || st === 'covered' || st === 'skipped' || st === 'pending';
+    }
+    // 주기 루틴 영역 집계: 현재 주기 안에 완료(또는 건너뜀)된 개수
+    function cycleAreaStatus(dateStr) {
+        const list = routines.filter(routineHasCycle);
+        let done = 0;
+        list.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'checked' || st === 'covered' || st === 'skipped') done++; });
+        return { done, total: list.length };
     }
     // 이번 주기 건너뛰기 / 취소
     function skipRoutineWindow(id) {
@@ -1167,7 +1197,7 @@
     // 특정 날짜의 모든 항목 (루틴 + 순환 + 요일 + 할 일) + 완료 여부
     function collectDayItems(dateStr) {
         const items = [];
-        routines.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'off' || st === 'covered' || st === 'skipped') return; items.push({ name: r.name, done: st === 'checked' }); });
+        routines.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'off' || st === 'covered' || st === 'skipped' || st === 'pending') return; items.push({ name: r.name, done: st === 'checked' }); });
         cycleRoutines.forEach(cr => {
             const rec = cycleDoneOn(cr, dateStr);
             if (rec) items.push({ name: `${cr.name}: ${rec}`, done: true });
@@ -1244,7 +1274,7 @@
             html += routines.map(r => {
                 const yD = (r.checkHistory || []).includes(y);
                 const tD = (r.checkHistory || []).includes(ref);
-                { const _st = routineCheckState(r, ref); if ((_st === 'off' || _st === 'skipped') && !tD) return ''; }
+                { const _st = routineCheckState(r, ref); if ((_st === 'off' || _st === 'skipped' || _st === 'pending') && !tD) return ''; }
                 return `<div class="brief-row" onclick="goToCheckDate('${ref}')"><span style="flex:1;">${escapeHtml(r.name)}</span><span style="font-size:12px; color:#888; white-space:nowrap;">전날 ${yD ? '✅' : '⬜'} · 당일 ${tD ? '✅' : '⬜'}</span></div>`;
             }).join('');
             html += cycleRoutines.map(cr => {
@@ -1341,7 +1371,7 @@
         let s = `📋 다했텅 브리핑 (${krLabel(ref)})\n`;
         if (routines.length) {
             s += `\n💚 루틴\n`;
-            s += routines.filter(r => { const _st = routineCheckState(r, ref); return _st !== 'off' && _st !== 'skipped'; })
+            s += routines.filter(r => { const _st = routineCheckState(r, ref); return _st !== 'off' && _st !== 'skipped' && _st !== 'pending'; })
                 .map(r => `- ${r.name} (전날 ${(r.checkHistory || []).includes(y) ? '✅' : '⬜'} · 당일 ${(r.checkHistory || []).includes(ref) ? '✅' : '⬜'})`).join('\n');
         }
         s += `\n\n📅 직전 일정${prevDay ? ` (${krLabel(prevDay)}, ${countDone(pTasks)}/${pTasks.length})` : ''}\n`;
@@ -1397,6 +1427,53 @@
             </div>`).join('') + '</div>';
     }
 
+    function renderCycleArea() {
+        const card = document.getElementById('cycleAreaCard');
+        const list = routines.filter(routineHasCycle);
+        if (list.length === 0) { card.style.display = 'none'; return; }
+        card.style.display = '';
+        const stat = cycleAreaStatus(checkDateStr);
+        const clear = stat.done === stat.total;
+        document.getElementById('cycleAreaTitle').innerHTML =
+            `🔄 주기 루틴 <span class="cnt">(${stat.done}/${stat.total})</span>${clear ? ' <span style="font-size:12px; color:#2f9e6e;">✨ 이번 주기 올클리어</span>' : ''}`;
+
+        document.getElementById('cycleAreaList').innerHTML = list.map(r => {
+            const st = routineCheckState(r, checkDateStr);
+            const w = routineWindow(r, checkDateStr);
+            const nd = routineNextDue(r, checkDateStr);
+            const leftTo = (d) => Math.max(0, Math.round((parseDate(d) - parseDate(checkDateStr)) / 86400000));
+
+            if (st === 'covered') {
+                const note = nd ? `다음 ${DOW_LABELS[r.cycleWeekday]}요일 리셋까지 ${leftTo(nd)}일` : '';
+                return `<div class="check-item" style="opacity:.6;">
+                    <div class="check-box done" style="background:#cfe9dc; border-color:#cfe9dc; cursor:default;">✓</div>
+                    <span class="check-emoji">${r.emoji||'💚'}</span>
+                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#8aa;">· 이번 주기 완료 · ${note}</span></span>
+                </div>`;
+            }
+            if (st === 'skipped') {
+                return `<div class="check-item" style="opacity:.6;">
+                    <div class="check-box" style="border-style:dashed; cursor:default;">⏭</div>
+                    <span class="check-emoji" style="filter:grayscale(.4);">${r.emoji||'💚'}</span>
+                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#a98;">· 이번 주기 건너뜀 · <span style="color:#4C6EF5; cursor:pointer; text-decoration:underline;" onclick="unskipRoutineWindow(${r.id})">취소</span></span></span>
+                </div>`;
+            }
+            const done = st === 'checked';
+            const dleft = w ? leftTo(w.end) : 0;
+            const meta = done
+                ? `${routineCycleLabel(r)}`
+                : (st === 'due'
+                    ? `<span style="color:var(--accent); font-weight:bold;">오늘이 이번 주기 마감</span>`
+                    : `마감 D-${dleft} · ${krLabel(w.end)}까지`);
+            const skipLink = done ? '' : ` · <span style="font-size:11px; color:#bbb; cursor:pointer; text-decoration:underline;" onclick="skipRoutineWindow(${r.id})">건너뛰기</span>`;
+            return `<div class="check-item">
+                <div class="check-box ${done?'done':''}" onclick="toggleRoutine(${r.id})">${done?'✓':''}</div>
+                <span class="check-emoji">${r.emoji||'💚'}</span>
+                <span class="check-name ${done?'done':''}">${escapeHtml(r.name)} <span style="font-size:11px; color:#a9a;">· ${meta}${skipLink}</span></span>
+            </div>`;
+        }).join('');
+    }
+
     function renderCheckTab() {
         const isToday = checkDateStr === getTodayStr();
         const isFuture = checkDateStr > getTodayStr();
@@ -1410,40 +1487,20 @@
 
         // 루틴 체크리스트 (일반 루틴 + 순환 루틴)
         const rEl = document.getElementById('routineChecklist');
-        let rHtml = routines.map(r => {
+        // 데일리 루틴 (주기 루틴은 아래 별도 영역으로 분리)
+        let rHtml = routines.filter(r => !routineHasCycle(r)).map(r => {
             const st = routineCheckState(r, checkDateStr);
             if (st === 'off') return '';
-            if (st === 'covered') {
-                // 이번 주기 완료 → 다음 기준 요일에 다시 뜸. 안내만 표시(탭 없음).
-                const due = routineNextDue(r, checkDateStr);
-                const left = due ? Math.max(0, Math.round((parseDate(due) - parseDate(checkDateStr)) / 86400000)) : 0;
-                const note = left > 0 ? `${DOW_LABELS[r.cycleWeekday]}요일 리셋까지 ${left}일` : '오늘까지';
-                return `<div class="check-item" style="opacity:.6;">
-                    <div class="check-box done" style="background:#cfe9dc; border-color:#cfe9dc; cursor:default;">✓</div>
-                    <span class="check-emoji">${r.emoji||'💚'}</span>
-                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#8aa;">· 이번 주기 완료 · ${note}</span></span>
-                </div>`;
-            }
-            if (st === 'skipped') {
-                // 이번 주기 건너뜀(휴가 등) → 달성률에서 제외. 탭으로 취소 가능.
-                const due = routineNextDue(r, checkDateStr);
-                const left = due ? Math.max(0, Math.round((parseDate(due) - parseDate(checkDateStr)) / 86400000)) : 0;
-                const note = left > 0 ? `${DOW_LABELS[r.cycleWeekday]}요일 리셋까지 ${left}일` : '';
-                return `<div class="check-item" style="opacity:.6;">
-                    <div class="check-box" style="border-style:dashed; cursor:default;">⏭</div>
-                    <span class="check-emoji" style="filter:grayscale(.4);">${r.emoji||'💚'}</span>
-                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#a98;">· 이번 주기 건너뜀${note?' · '+note:''} · <span style="color:#4C6EF5; cursor:pointer; text-decoration:underline;" onclick="unskipRoutineWindow(${r.id})">취소</span></span></span>
-                </div>`;
-            }
             const done = st === 'checked';
-            const cycTag = routineHasCycle(r) ? ` <span style="font-size:11px; color:#c99;">· ${routineCycleLabel(r)}</span>` : '';
-            const skipLink = (!done && routineHasCycle(r)) ? ` <span style="font-size:11px; color:#bbb; cursor:pointer; text-decoration:underline;" onclick="skipRoutineWindow(${r.id})">이번 주기 건너뛰기</span>` : '';
             return `<div class="check-item">
                 <div class="check-box ${done?'done':''}" onclick="toggleRoutine(${r.id})">${done?'✓':''}</div>
                 <span class="check-emoji">${r.emoji||'💚'}</span>
-                <span class="check-name ${done?'done':''}">${escapeHtml(r.name)}${done?'':cycTag}${skipLink}</span>
+                <span class="check-name ${done?'done':''}">${escapeHtml(r.name)}</span>
             </div>`;
         }).join('');
+
+        // 🔄 주기 루틴 영역: 주기 안에 한 번만 하면 되고, 마지막 날이 마감
+        renderCycleArea();
 
         cycleRoutines.forEach(cr => {
             if (!cr.items || cr.items.length === 0) return;
@@ -2055,7 +2112,7 @@
     function routineDayStatus(dateStr) {
         const isToday = dateStr === getTodayStr();
         let total = 0, done = 0;
-        routines.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'off' || st === 'skipped') return; total++; if (st === 'checked' || st === 'covered') done++; });
+        routines.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'off' || st === 'skipped' || st === 'pending' || st === 'covered') return; total++; if (st === 'checked') done++; });
         weekdayRoutines.forEach(wr => { if (weekdayDisplayItem(wr, dateStr)) { total++; if (weekdayIsDone(wr, dateStr)) done++; } });
         cycleRoutines.forEach(cr => {
             if (!cr.items || !cr.items.length) return;
