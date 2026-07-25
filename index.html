@@ -316,20 +316,31 @@
                 <input type="text" id="newRoutineName" placeholder="루틴 이름 (예: 아침 스트레칭)" style="flex:1;">
             </div>
             <div style="margin-top:2px;">
-                <div style="font-size:12px; color:var(--gray); font-weight:bold; margin-bottom:4px;">완료 주기 <span style="font-weight:normal; color:#aaa;">(안 고르면 매일)</span></div>
-                <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
-                    <select id="newRoutineCycleWeeks" style="flex:0 0 auto;" onchange="onCycleWeeksSelChange('newRoutineCycleWeeks','newRoutineCycleWeeksWrap')">
-                        <option value="1">매주</option>
-                        <option value="2">격주</option>
-                        <option value="custom">직접 입력</option>
-                    </select>
-                    <span id="newRoutineCycleWeeksWrap" style="display:none; align-items:center; gap:4px;">
-                        <input type="number" id="newRoutineCycleWeeksInput" min="2" placeholder="3" inputmode="numeric" style="width:56px;">
-                        <span style="font-size:12px; color:var(--gray);">주마다</span>
-                    </span>
-                    <span style="font-size:12px; color:var(--gray);">이 요일에 리셋 →</span>
+                <div style="font-size:12px; color:var(--gray); font-weight:bold; margin-bottom:4px;">반복</div>
+                <div class="mode-seg" style="display:flex; gap:4px; margin-bottom:6px;">
+                    <button type="button" class="dow-chip on" id="newMode-daily" onclick="setRoutineMode('new','daily')">매일</button>
+                    <button type="button" class="dow-chip" id="newMode-cycle" onclick="setRoutineMode('new','cycle')">완료 주기</button>
+                    <button type="button" class="dow-chip" id="newMode-once" onclick="setRoutineMode('new','once')">요일 중 한 번</button>
                 </div>
-                <div id="newRoutineCycleChips" style="display:flex; gap:4px;"></div>
+                <div id="newModeCycle" style="display:none;">
+                    <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+                        <select id="newRoutineCycleWeeks" style="flex:0 0 auto;" onchange="onCycleWeeksSelChange('newRoutineCycleWeeks','newRoutineCycleWeeksWrap')">
+                            <option value="1">매주</option>
+                            <option value="2">격주</option>
+                            <option value="custom">직접 입력</option>
+                        </select>
+                        <span id="newRoutineCycleWeeksWrap" style="display:none; align-items:center; gap:4px;">
+                            <input type="number" id="newRoutineCycleWeeksInput" min="2" placeholder="3" inputmode="numeric" style="width:56px;">
+                            <span style="font-size:12px; color:var(--gray);">주마다</span>
+                        </span>
+                        <span style="font-size:12px; color:var(--gray);">이 요일에 리셋 →</span>
+                    </div>
+                    <div id="newRoutineCycleChips" style="display:flex; gap:4px;"></div>
+                </div>
+                <div id="newModeOnce" style="display:none;">
+                    <div style="font-size:11px; color:#aaa; margin-bottom:4px;">고른 요일 중 <b>주 1회</b>만 하면 완료. 마지막 요일이 마감이에요 (한 주는 월~일).</div>
+                    <div id="newRoutineOnceChips" style="display:flex; gap:4px;"></div>
+                </div>
             </div>
             <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="addRoutine()">루틴 추가</button>
             <div id="routineMngList" style="margin-top:10px;"></div>
@@ -418,20 +429,31 @@
             <input type="text" id="editRoutineName" placeholder="루틴 이름" style="flex:1;">
         </div>
         <div id="editRoutineCycleRow" style="margin-top:4px;">
-            <div style="font-size:12px; color:var(--gray); font-weight:bold; margin-bottom:4px;">완료 주기 <span style="font-weight:normal; color:#aaa;">(안 고르면 매일)</span></div>
-            <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
-                <select id="editRoutineCycleWeeks" style="flex:0 0 auto;" onchange="onCycleWeeksSelChange('editRoutineCycleWeeks','editRoutineCycleWeeksWrap')">
-                    <option value="1">매주</option>
-                    <option value="2">격주</option>
-                    <option value="custom">직접 입력</option>
-                </select>
-                <span id="editRoutineCycleWeeksWrap" style="display:none; align-items:center; gap:4px;">
-                    <input type="number" id="editRoutineCycleWeeksInput" min="2" placeholder="3" inputmode="numeric" style="width:56px;">
-                    <span style="font-size:12px; color:var(--gray);">주마다</span>
-                </span>
-                <span style="font-size:12px; color:var(--gray);">이 요일에 리셋 →</span>
+            <div style="font-size:12px; color:var(--gray); font-weight:bold; margin-bottom:4px;">반복</div>
+            <div class="mode-seg" style="display:flex; gap:4px; margin-bottom:6px;">
+                <button type="button" class="dow-chip on" id="editMode-daily" onclick="setRoutineMode('edit','daily')">매일</button>
+                <button type="button" class="dow-chip" id="editMode-cycle" onclick="setRoutineMode('edit','cycle')">완료 주기</button>
+                <button type="button" class="dow-chip" id="editMode-once" onclick="setRoutineMode('edit','once')">요일 중 한 번</button>
             </div>
-            <div id="editRoutineCycleChips" style="display:flex; gap:4px;"></div>
+            <div id="editModeCycle" style="display:none;">
+                <div style="display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap;">
+                    <select id="editRoutineCycleWeeks" style="flex:0 0 auto;" onchange="onCycleWeeksSelChange('editRoutineCycleWeeks','editRoutineCycleWeeksWrap')">
+                        <option value="1">매주</option>
+                        <option value="2">격주</option>
+                        <option value="custom">직접 입력</option>
+                    </select>
+                    <span id="editRoutineCycleWeeksWrap" style="display:none; align-items:center; gap:4px;">
+                        <input type="number" id="editRoutineCycleWeeksInput" min="2" placeholder="3" inputmode="numeric" style="width:56px;">
+                        <span style="font-size:12px; color:var(--gray);">주마다</span>
+                    </span>
+                    <span style="font-size:12px; color:var(--gray);">이 요일에 리셋 →</span>
+                </div>
+                <div id="editRoutineCycleChips" style="display:flex; gap:4px;"></div>
+            </div>
+            <div id="editModeOnce" style="display:none;">
+                <div style="font-size:11px; color:#aaa; margin-bottom:4px;">고른 요일 중 <b>주 1회</b>만 하면 완료. 마지막 요일이 마감이에요 (한 주는 월~일).</div>
+                <div id="editRoutineOnceChips" style="display:flex; gap:4px;"></div>
+            </div>
         </div>
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('routineEditOverlay')">취소</button>
@@ -1068,6 +1090,27 @@
     // cycleWeekday(0=일~6=토)를 정하면 그 요일마다 리셋되는 주간 루틴이 됨. cycleWeeks=간격(1=매주,2=격주).
     // 창(window) 안엔 아무 날 한 번만 체크하면 "달성"으로 처리되고, 다음 기준 요일에 다시 뜸.
     function routineHasCycle(r) { return r && typeof r.cycleWeekday === 'number' && r.cycleWeekday >= 0 && r.cycleWeekday <= 6; }
+    function routineHasOnce(r) { return r && Array.isArray(r.onceDays) && r.onceDays.some(Boolean); }
+    function routineIsWeekly(r) { return routineHasCycle(r) || routineHasOnce(r); }
+    // 이번 '주'(월~일)의 시작 월요일과 끝 일요일
+    function weekMon(dateStr) {
+        const dow = new Date(parseDate(dateStr)).getDay();
+        const start = addDaysStr(dateStr, -((dow === 0) ? 6 : dow - 1));
+        return { start, end: addDaysStr(start, 6) };
+    }
+    function onceIsCandidate(r, dateStr) { return !!(r.onceDays && r.onceDays[new Date(parseDate(dateStr)).getDay()]); }
+    // 이번 주 후보 요일 중 하루라도 완료했는가
+    function onceDoneThisWeek(r, dateStr) {
+        const { start, end } = weekMon(dateStr);
+        return (r.checkHistory || []).some(h => h >= start && h <= end && r.onceDays[new Date(parseDate(h)).getDay()]);
+    }
+    // 그 주의 마지막 후보 요일 (이 날 지나도록 안 하면 미완료 확정)
+    function onceLastCandidate(r, dateStr) {
+        const { start } = weekMon(dateStr); let last = null;
+        for (let i = 0; i < 7; i++) { const d = addDaysStr(start, i); if (r.onceDays[new Date(parseDate(d)).getDay()]) last = d; }
+        return last;
+    }
+    function onceSkippedThisWeek(r, dateStr) { return (r.skipWeeks || []).includes('once:' + weekMon(dateStr).start); }
     function routineCycleWeeks(r) { const n = parseInt(r && r.cycleWeeks, 10); return (n && n > 0) ? n : 1; }
     // dateStr 기준, 그 이하(=이전)의 가장 최근 '기준 요일' 날짜 (창의 시작)
     function cycleAnchorStart(dateStr, wd) {
@@ -1090,16 +1133,25 @@
         (r.skipWeeks || []).forEach(d => consider(d, 'skip'));
         return best;
     }
-    // 다시 떠야 하는 날 (지배 이벤트가 속한 창의 시작 + 간격주). 항상 기준 요일에 떨어짐.
+    // 다시 떠야 하는 날. 주기: 지배 이벤트 창 시작 + 간격주. 요일중한번: 다음 주 첫 후보 요일.
     function routineNextDue(r, dateStr) {
+        if (routineHasOnce(r)) {
+            const nextMon = addDaysStr(weekMon(dateStr).start, 7);
+            for (let i = 0; i < 7; i++) { const d = addDaysStr(nextMon, i); if (onceIsCandidate(r, d)) return d; }
+            return nextMon;
+        }
         if (!routineHasCycle(r)) return null;
         const ev = routineGoverningEvent(r, dateStr);
         if (!ev) return null;
         const cs = cycleAnchorStart(ev.date, r.cycleWeekday);
         return addDaysStr(cs, routineCycleWeeks(r) * 7);
     }
-    // dateStr가 속한 현재 주기 창 {start, end}. end = 그 주기의 마지막 날(=마감일)
+    // dateStr가 속한 현재 창 {start, end}. end = 마감일(주기: 창 마지막 날 / 요일중한번: 마지막 후보 요일)
     function routineWindow(r, dateStr) {
+        if (routineHasOnce(r)) {
+            const last = onceLastCandidate(r, dateStr);
+            return last ? { start: weekMon(dateStr).start, end: last } : null;
+        }
         if (!routineHasCycle(r)) return null;
         const n = routineCycleWeeks(r);
         const ev = routineGoverningEvent(r, dateStr);
@@ -1113,9 +1165,15 @@
         return { start, end: addDaysStr(start, n * 7 - 1) };
     }
     // 그날 상태: 'checked' | 'covered' | 'skipped' | 'pending' | 'due' | 'off'
-    // 주기 루틴은 창 안엔 'pending'(올클리어 영향 없음), 창 마지막 날에만 'due'(마감 → 미완료로 잡힘)
+    // 주간형은 창 안엔 'pending'(올클리어 영향 없음), 마감일(주기 마지막 날/마지막 후보 요일)에만 'due'
     function routineCheckState(r, dateStr) {
         if ((r.checkHistory || []).includes(dateStr)) return 'checked';
+        if (routineHasOnce(r)) {
+            if (onceSkippedThisWeek(r, dateStr)) return 'skipped';
+            if (onceDoneThisWeek(r, dateStr)) return 'covered';
+            if (!onceIsCandidate(r, dateStr)) return 'off';
+            return dateStr === onceLastCandidate(r, dateStr) ? 'due' : 'pending';
+        }
         if (routineHasCycle(r)) {
             const ev = routineGoverningEvent(r, dateStr);
             if (ev) {
@@ -1132,30 +1190,42 @@
         const st = routineCheckState(r, dateStr);
         return st === 'checked' || st === 'covered' || st === 'skipped' || st === 'pending';
     }
-    // 주기 루틴 영역 집계: 현재 주기 안에 완료(또는 건너뜀)된 개수
+    // 주간형 루틴 영역 집계: 현재 창 안에 완료(또는 건너뜀)된 개수
     function cycleAreaStatus(dateStr) {
-        const list = routines.filter(routineHasCycle);
+        const list = routines.filter(routineIsWeekly);
         let done = 0;
         list.forEach(r => { const st = routineCheckState(r, dateStr); if (st === 'checked' || st === 'covered' || st === 'skipped') done++; });
         return { done, total: list.length };
     }
-    // 이번 주기 건너뛰기 / 취소
+    // 이번 주기(주) 건너뛰기 / 취소
     function skipRoutineWindow(id) {
-        const r = routines.find(x => x.id === id); if (!r || !routineHasCycle(r)) return;
-        const wa = cycleAnchorStart(checkDateStr, r.cycleWeekday);
+        const r = routines.find(x => x.id === id); if (!r) return;
+        let key;
+        if (routineHasOnce(r)) key = 'once:' + weekMon(checkDateStr).start;
+        else if (routineHasCycle(r)) key = cycleAnchorStart(checkDateStr, r.cycleWeekday);
+        else return;
         r.skipWeeks = r.skipWeeks || [];
-        if (!r.skipWeeks.includes(wa)) r.skipWeeks.push(wa);
+        if (!r.skipWeeks.includes(key)) r.skipWeeks.push(key);
         syncAll();
         showToast('⏭️ 이번 주기를 건너뛰었어요');
     }
     function unskipRoutineWindow(id) {
         const r = routines.find(x => x.id === id); if (!r) return;
-        const ev = routineGoverningEvent(r, checkDateStr);
-        if (ev && ev.type === 'skip') r.skipWeeks = (r.skipWeeks || []).filter(d => d !== ev.date);
+        if (routineHasOnce(r)) {
+            const key = 'once:' + weekMon(checkDateStr).start;
+            r.skipWeeks = (r.skipWeeks || []).filter(d => d !== key);
+        } else {
+            const ev = routineGoverningEvent(r, checkDateStr);
+            if (ev && ev.type === 'skip') r.skipWeeks = (r.skipWeeks || []).filter(d => d !== ev.date);
+        }
         syncAll();
         showToast('건너뛰기를 취소했어요');
     }
     function routineCycleLabel(r) {
+        if (routineHasOnce(r)) {
+            const days = DOW_ORDER.filter(d => r.onceDays[d]).map(d => DOW_LABELS[d]);
+            return `${days.length ? days.join('·') : '요일'} 중 주 1회`;
+        }
         if (!routineHasCycle(r)) return '';
         const wk = routineCycleWeeks(r);
         const pre = wk === 1 ? '매주' : wk === 2 ? '격주' : `${wk}주마다`;
@@ -1429,7 +1499,7 @@
 
     function renderCycleArea() {
         const card = document.getElementById('cycleAreaCard');
-        const list = routines.filter(routineHasCycle);
+        const list = routines.filter(routineIsWeekly);
         if (list.length === 0) { card.style.display = 'none'; return; }
         card.style.display = '';
         const stat = cycleAreaStatus(checkDateStr);
@@ -1444,11 +1514,13 @@
             const leftTo = (d) => Math.max(0, Math.round((parseDate(d) - parseDate(checkDateStr)) / 86400000));
 
             if (st === 'covered') {
-                const note = nd ? `다음 ${DOW_LABELS[r.cycleWeekday]}요일 리셋까지 ${leftTo(nd)}일` : '';
+                const note = routineHasOnce(r)
+                    ? (nd ? `이번 주 완료 · 다음 주 ${DOW_LABELS[new Date(parseDate(nd)).getDay()]}요일부터` : '이번 주 완료')
+                    : (nd ? `다음 ${DOW_LABELS[r.cycleWeekday]}요일 리셋까지 ${leftTo(nd)}일` : '');
                 return `<div class="check-item" style="opacity:.6;">
                     <div class="check-box done" style="background:#cfe9dc; border-color:#cfe9dc; cursor:default;">✓</div>
                     <span class="check-emoji">${r.emoji||'💚'}</span>
-                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#8aa;">· 이번 주기 완료 · ${note}</span></span>
+                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#8aa;">· ${routineHasOnce(r)?'':'이번 주기 완료 · '}${note}</span></span>
                 </div>`;
             }
             if (st === 'skipped') {
@@ -1458,12 +1530,21 @@
                     <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#a98;">· 이번 주기 건너뜀 · <span style="color:#4C6EF5; cursor:pointer; text-decoration:underline;" onclick="unskipRoutineWindow(${r.id})">취소</span></span></span>
                 </div>`;
             }
+            if (st === 'off') {
+                // 요일 중 한 번 루틴인데 오늘은 후보 요일이 아님 → 정보만(체크 불가)
+                const dleft = w ? leftTo(w.end) : 0;
+                return `<div class="check-item" style="opacity:.5;">
+                    <div class="check-box" style="border-style:dotted; cursor:default;"></div>
+                    <span class="check-emoji">${r.emoji||'💚'}</span>
+                    <span class="check-name">${escapeHtml(r.name)} <span style="font-size:11px; color:#aaa;">· ${routineCycleLabel(r)} · 오늘은 후보 요일 아님${w ? ` · 마감 D-${dleft}` : ''}</span></span>
+                </div>`;
+            }
             const done = st === 'checked';
             const dleft = w ? leftTo(w.end) : 0;
             const meta = done
                 ? `${routineCycleLabel(r)}`
                 : (st === 'due'
-                    ? `<span style="color:var(--accent); font-weight:bold;">오늘이 이번 주기 마감</span>`
+                    ? `<span style="color:var(--accent); font-weight:bold;">${routineHasOnce(r) ? '오늘이 이번 주 마감' : '오늘이 이번 주기 마감'}</span>`
                     : `마감 D-${dleft} · ${krLabel(w.end)}까지`);
             const skipLink = done ? '' : ` · <span style="font-size:11px; color:#bbb; cursor:pointer; text-decoration:underline;" onclick="skipRoutineWindow(${r.id})">건너뛰기</span>`;
             return `<div class="check-item">
@@ -1488,7 +1569,7 @@
         // 루틴 체크리스트 (일반 루틴 + 순환 루틴)
         const rEl = document.getElementById('routineChecklist');
         // 데일리 루틴 (주기 루틴은 아래 별도 영역으로 분리)
-        let rHtml = routines.filter(r => !routineHasCycle(r)).map(r => {
+        let rHtml = routines.filter(r => !routineIsWeekly(r)).map(r => {
             const st = routineCheckState(r, checkDateStr);
             if (st === 'off') return '';
             const done = st === 'checked';
@@ -1591,35 +1672,60 @@
     }
 
     // ══════════ 루틴 CRUD ══════════
-    // 완료 주기 요일 선택 상태 (null=매일)
+    // 반복 모드 상태
+    let newRoutineMode = 'daily', editRoutineMode = 'daily';
     let newRoutineCycleWd = null, editRoutineCycleWd = null;
+    let newRoutineOnceDays = [false,false,false,false,false,false,false];
+    let editRoutineOnceDays = [false,false,false,false,false,false,false];
     function cycleChipsHtml(selected, handler) {
         return DOW_ORDER.map(d =>
             `<button class="dow-chip ${selected === d ? 'on' : ''}" onclick="${handler}(${d})">${DOW_LABELS[d]}</button>`
+        ).join('');
+    }
+    function onceChipsHtml(arr, handler) {
+        return DOW_ORDER.map(d =>
+            `<button class="dow-chip ${arr[d] ? 'on' : ''}" onclick="${handler}(${d})">${DOW_LABELS[d]}</button>`
         ).join('');
     }
     function renderNewRoutineCycleChips() {
         const el = document.getElementById('newRoutineCycleChips');
         if (el) el.innerHTML = cycleChipsHtml(newRoutineCycleWd, 'selectNewRoutineCycleWd');
     }
-    function selectNewRoutineCycleWd(d) {
-        newRoutineCycleWd = (newRoutineCycleWd === d) ? null : d; // 같은 요일 다시 누르면 해제(=매일)
-        renderNewRoutineCycleChips();
-    }
+    function selectNewRoutineCycleWd(d) { newRoutineCycleWd = (newRoutineCycleWd === d) ? null : d; renderNewRoutineCycleChips(); }
     function renderEditRoutineCycleChips() {
         const el = document.getElementById('editRoutineCycleChips');
         if (el) el.innerHTML = cycleChipsHtml(editRoutineCycleWd, 'selectEditRoutineCycleWd');
     }
-    function selectEditRoutineCycleWd(d) {
-        editRoutineCycleWd = (editRoutineCycleWd === d) ? null : d;
-        renderEditRoutineCycleChips();
+    function selectEditRoutineCycleWd(d) { editRoutineCycleWd = (editRoutineCycleWd === d) ? null : d; renderEditRoutineCycleChips(); }
+    function renderNewOnceChips() {
+        const el = document.getElementById('newRoutineOnceChips');
+        if (el) el.innerHTML = onceChipsHtml(newRoutineOnceDays, 'toggleNewOnceDay');
+    }
+    function toggleNewOnceDay(d) { newRoutineOnceDays[d] = !newRoutineOnceDays[d]; renderNewOnceChips(); }
+    function renderEditOnceChips() {
+        const el = document.getElementById('editRoutineOnceChips');
+        if (el) el.innerHTML = onceChipsHtml(editRoutineOnceDays, 'toggleEditOnceDay');
+    }
+    function toggleEditOnceDay(d) { editRoutineOnceDays[d] = !editRoutineOnceDays[d]; renderEditOnceChips(); }
+    // 반복 모드 전환 (which='new'|'edit')
+    function setRoutineMode(which, mode) {
+        if (which === 'new') newRoutineMode = mode; else editRoutineMode = mode;
+        ['daily','cycle','once'].forEach(m => {
+            const b = document.getElementById(which + 'Mode-' + m);
+            if (b) b.classList.toggle('on', m === mode);
+        });
+        const cyc = document.getElementById(which + 'ModeCycle');
+        const onc = document.getElementById(which + 'ModeOnce');
+        if (cyc) cyc.style.display = mode === 'cycle' ? '' : 'none';
+        if (onc) onc.style.display = mode === 'once' ? '' : 'none';
+        if (mode === 'cycle') (which === 'new' ? renderNewRoutineCycleChips : renderEditRoutineCycleChips)();
+        if (mode === 'once') (which === 'new' ? renderNewOnceChips : renderEditOnceChips)();
     }
     // '직접 입력' 선택 시 숫자 칸 표시 토글
     function onCycleWeeksSelChange(selId, wrapId) {
         const custom = document.getElementById(selId).value === 'custom';
         document.getElementById(wrapId).style.display = custom ? 'inline-flex' : 'none';
     }
-    // 선택 + 직접입력 값 → 주 간격 숫자
     function readCycleWeeks(selId, inputId) {
         const v = document.getElementById(selId).value;
         if (v === 'custom') { const n = parseInt(document.getElementById(inputId).value, 10); return (n && n >= 2) ? n : 2; }
@@ -1630,9 +1736,13 @@
         const name = document.getElementById('newRoutineName').value.trim();
         if (!name) { showToast('루틴 이름을 입력해 주세요'); return; }
         const routine = { id: Date.now(), name, emoji, memos: [], checkHistory: [] };
-        if (newRoutineCycleWd !== null) {
+        if (newRoutineMode === 'cycle') {
+            if (newRoutineCycleWd === null) { showToast('리셋 요일을 골라주세요'); return; }
             routine.cycleWeekday = newRoutineCycleWd;
             routine.cycleWeeks = readCycleWeeks('newRoutineCycleWeeks', 'newRoutineCycleWeeksInput');
+        } else if (newRoutineMode === 'once') {
+            if (!newRoutineOnceDays.some(Boolean)) { showToast('후보 요일을 하나 이상 골라주세요'); return; }
+            routine.onceDays = newRoutineOnceDays.slice();
         }
         routines.push(routine);
         document.getElementById('newRoutineEmoji').value = '';
@@ -1640,7 +1750,8 @@
         document.getElementById('newRoutineCycleWeeks').value = '1';
         document.getElementById('newRoutineCycleWeeksInput').value = '';
         onCycleWeeksSelChange('newRoutineCycleWeeks', 'newRoutineCycleWeeksWrap');
-        newRoutineCycleWd = null; renderNewRoutineCycleChips();
+        newRoutineCycleWd = null; newRoutineOnceDays = [false,false,false,false,false,false,false];
+        setRoutineMode('new', 'daily');
         syncAll();
         showToast(`${emoji} [${name}] 루틴이 추가됐어요`);
     }
@@ -1662,13 +1773,18 @@
         const cycRow = document.getElementById('editRoutineCycleRow');
         if (kind === 'routine') {
             cycRow.style.display = '';
+            // 주기 컨트롤 세팅
             editRoutineCycleWd = routineHasCycle(r) ? r.cycleWeekday : null;
             const wk = routineCycleWeeks(r);
             const sel = document.getElementById('editRoutineCycleWeeks');
             if (wk === 1 || wk === 2) { sel.value = String(wk); }
             else { sel.value = 'custom'; document.getElementById('editRoutineCycleWeeksInput').value = wk; }
             onCycleWeeksSelChange('editRoutineCycleWeeks', 'editRoutineCycleWeeksWrap');
-            renderEditRoutineCycleChips();
+            // 요일중한번 컨트롤 세팅
+            editRoutineOnceDays = routineHasOnce(r) ? r.onceDays.slice() : [false,false,false,false,false,false,false];
+            // 모드 결정 + 패널 표시
+            const mode = routineHasOnce(r) ? 'once' : (routineHasCycle(r) ? 'cycle' : 'daily');
+            setRoutineMode('edit', mode);
         } else {
             cycRow.style.display = 'none';
         }
@@ -1688,11 +1804,17 @@
         r.emoji = document.getElementById('editRoutineEmoji').value.trim() || fallback;
         r.name = name;
         if (kind === 'routine') {
-            if (editRoutineCycleWd !== null) {
+            if (editRoutineMode === 'cycle') {
+                if (editRoutineCycleWd === null) { showToast('리셋 요일을 골라주세요'); return; }
                 r.cycleWeekday = editRoutineCycleWd;
                 r.cycleWeeks = readCycleWeeks('editRoutineCycleWeeks', 'editRoutineCycleWeeksInput');
+                delete r.onceDays; delete r.activeDays;
+            } else if (editRoutineMode === 'once') {
+                if (!editRoutineOnceDays.some(Boolean)) { showToast('후보 요일을 하나 이상 골라주세요'); return; }
+                r.onceDays = editRoutineOnceDays.slice();
+                delete r.cycleWeekday; delete r.cycleWeeks; delete r.activeDays;
             } else {
-                delete r.cycleWeekday; delete r.cycleWeeks;
+                delete r.cycleWeekday; delete r.cycleWeeks; delete r.onceDays;
             }
             delete r.cycleDays; // 구버전 필드 정리
         }
@@ -1718,19 +1840,15 @@
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div class="mng-info">
                         <div class="mng-name"><span class="check-emoji">${r.emoji||'💚'}</span> ${escapeHtml(r.name)}</div>
-                        <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료${routineHasCycle(r) ? ` · 🔄 ${routineCycleLabel(r)}` : ''}</div>
+                        <div class="mng-sub">누적 ${(r.checkHistory||[]).length}일 완료${routineIsWeekly(r) ? ` · 🔄 ${routineCycleLabel(r)}` : ''}</div>
                     </div>
                     <div class="mng-actions">
                         <button class="icon-btn" onclick="editRoutine(${r.id})">수정</button>
                         <button class="icon-btn del" onclick="deleteRoutine(${r.id})">삭제</button>
                     </div>
                 </div>
-                ${routineHasCycle(r)
-                    ? (() => {
-                        const todayWa = cycleAnchorStart(getTodayStr(), r.cycleWeekday);
-                        const upcoming = (r.skipWeeks || []).filter(d => addDaysStr(d, routineCycleWeeks(r) * 7) > getTodayStr()).length;
-                        return `<div style="font-size:11px; color:#aaa; line-height:1.6;">완료 주기 루틴은 적용 요일·제외 날짜 대신, 휴가 등은 체크 화면에서 <b>“이번 주기 건너뛰기”</b>로 쉬어요. (${routineCycleLabel(r)})${upcoming ? ` · <span style="color:#a98;">건너뛴 주기 ${upcoming}개</span>` : ''}</div>`;
-                    })()
+                ${routineIsWeekly(r)
+                    ? `<div style="font-size:11px; color:#aaa; line-height:1.6;">${routineHasOnce(r) ? '요일 중 한 번 루틴' : '완료 주기 루틴'}은 적용 요일·제외 날짜 대신, 휴가 등은 체크 화면에서 <b>“건너뛰기”</b>로 쉬어요. (${routineCycleLabel(r)})</div>`
                     : dayChipsHtml('routine', r) + excludeSectionHtml('routine', r)}
             </div>`).join('');
     }
