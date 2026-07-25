@@ -1492,7 +1492,7 @@
         if (!tMemos || tMemos.length === 0) return '';
         return '<div style="padding-left:' + (projId===null?'34':'46') + 'px;">' + tMemos.map(m => `
             <div class="memo-chip">
-                <span class="memo-text" onclick="openMemoView(${m.id})" style="cursor:pointer;">📒 ${escapeHtml(m.text)}</span>
+                <span class="memo-text" onclick="openMemoView(${m.id})" style="cursor:pointer;">${escapeHtml(m.text)}</span>
                 <span style="color:var(--danger); cursor:pointer; flex-shrink:0;" onclick="deleteMemoEntry(${m.id})">×</span>
             </div>`).join('') + '</div>';
     }
