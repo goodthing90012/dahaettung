@@ -2530,6 +2530,15 @@
         if (!m.link) return '';
         return m.link.name || (m.link.kind === 'project' ? '프로젝트 할 일' : '단독 할 일');
     }
+    // 연결된 할 일의 날짜로 이동 (체크 탭)
+    function openLinkedTask(memoId) {
+        const m = memoStore.find(x => x.id === memoId); if (!m || !m.link) return;
+        const pid = m.link.kind === 'project' ? m.link.projectId : null;
+        const t = findTask(pid, m.link.taskId);
+        if (!t) { showToast('연결된 할 일을 찾을 수 없어요 (삭제됐을 수 있어요)'); return; }
+        closeOverlay('memoViewOverlay');
+        goToCheckDate(t.date);
+    }
     // 메모 자세히 보기 (읽기 전용, 전체화면)
     let viewingMemoId = null;
     function openMemoView(id) {
@@ -2537,7 +2546,7 @@
         viewingMemoId = id;
         document.getElementById('memoViewDate').textContent = krLabel(m.date);
         document.getElementById('memoViewLink').innerHTML = m.link
-            ? `<span class="memo-view-link">🔗 ${escapeHtml(memoLinkLabel(m))}</span>` : '';
+            ? `<span class="memo-view-link" style="cursor:pointer;" onclick="openLinkedTask(${m.id})">🔗 ${escapeHtml(memoLinkLabel(m))} <span style="opacity:.7;">›</span></span>` : '';
         document.getElementById('memoViewText').textContent = m.text;
         document.getElementById('memoViewPhotos').innerHTML = (m.photos || [])
             .map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}','${(m.photos || []).join(',')}')">`).join('');
