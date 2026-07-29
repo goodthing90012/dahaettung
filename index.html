@@ -1082,8 +1082,16 @@
     function cycleActiveOnDay(cr, dateStr) {
         return itemActiveOnDay(cr, dateStr);
     }
-    // 일반 루틴: 그날 대상인지
+    // 루틴 생성일(id는 Date.now() 기반이라 생성 시각을 그대로 담고 있음). 명시적 createdAt이 있으면 그걸 우선.
+    function routineCreatedStr(r) {
+        if (r.createdAt) return r.createdAt;
+        if (r.id) return formatDateString(r.id);
+        return null;
+    }
+    // 일반 루틴: 그날 대상인지 (생성일 이전은 대상 아님)
     function routineActiveOnDay(r, dateStr) {
+        const c = routineCreatedStr(r);
+        if (c && dateStr < c) return false;
         return itemActiveOnDay(r, dateStr);
     }
     // ── 완료 주기(기준 요일) 루틴 헬퍼 ──
@@ -1168,6 +1176,8 @@
     // 주간형은 창 안엔 'pending'(올클리어 영향 없음), 마감일(주기 마지막 날/마지막 후보 요일)에만 'due'
     function routineCheckState(r, dateStr) {
         if ((r.checkHistory || []).includes(dateStr)) return 'checked';
+        // 루틴 생성일 이전 날짜는 대상 아님 (과거 올클리어에 영향 주지 않음)
+        { const c = routineCreatedStr(r); if (c && dateStr < c) return 'off'; }
         if (routineHasOnce(r)) {
             if (onceSkippedThisWeek(r, dateStr)) return 'skipped';
             if (onceDoneThisWeek(r, dateStr)) return 'covered';
@@ -1247,10 +1257,12 @@
         return (wr.checkHistory || []).find(x => x && x.date === dateStr) || null;
     }
     function weekdayIsDone(wr, dateStr) { return !!weekdayRecord(wr, dateStr); }
-    // 그날 표시할 항목: 완료했으면 그날 기록한 항목, 아니면 현재 요일표 항목
+    // 그날 표시할 항목: 완료했으면 그날 기록한 항목, 아니면 현재 요일표 항목 (생성일 이전은 대상 아님)
     function weekdayDisplayItem(wr, dateStr) {
         const rec = weekdayRecord(wr, dateStr);
         if (rec) return rec.item || weekdayItemOn(wr, dateStr) || '';
+        const c = routineCreatedStr(wr);
+        if (c && dateStr < c) return null;
         if (wr.excludeDates && wr.excludeDates.includes(dateStr)) return null;
         return weekdayItemOn(wr, dateStr);
     }
@@ -1735,7 +1747,7 @@
         const emoji = document.getElementById('newRoutineEmoji').value.trim() || '💚';
         const name = document.getElementById('newRoutineName').value.trim();
         if (!name) { showToast('루틴 이름을 입력해 주세요'); return; }
-        const routine = { id: Date.now(), name, emoji, memos: [], checkHistory: [] };
+        const routine = { id: Date.now(), name, emoji, memos: [], checkHistory: [], createdAt: getTodayStr() };
         if (newRoutineMode === 'cycle') {
             if (newRoutineCycleWd === null) { showToast('리셋 요일을 골라주세요'); return; }
             routine.cycleWeekday = newRoutineCycleWd;
