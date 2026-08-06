@@ -572,6 +572,9 @@
                 <span class="photo-add-face">📷 사진 추가</span>
                 <input type="file" id="memoPhotoInput" accept="image/*" multiple onchange="addMemoPhotos(this.files)">
             </div>
+            <div id="memoPhotoTabLinkWrap" style="display:none; margin-top:6px;">
+                <button type="button" id="memoPhotoTabLinkBtn" class="dow-chip" style="flex:0 0 auto; width:auto; padding:8px 12px;" onclick="toggleMemoPhotoTabLink()"></button>
+            </div>
         </div>
         <div id="memoLinkInfo" style="font-size:11px; color:var(--gray); margin-top:6px;"></div>
         <div class="modal-btn-row">
@@ -945,9 +948,10 @@
     }
     // 그날 카테고리+사진이 붙은 메모 중 첫 번째 → 달력 칸 배경 사진용
     // 그날 사진이 있는 메모들 (카테고리 무관, 순서대로)
+    // 한컷 탭: viaPhotoTab이 true인 메모(한컷에서 추가했거나, 메모에서 명시적으로 연동한 것)만 노출
     function dayPhotos(dateStr) {
         return memoStore
-            .filter(m => m.date === dateStr && Array.isArray(m.photos) && m.photos.length && photoCache[m.photos[0]])
+            .filter(m => m.date === dateStr && m.viaPhotoTab && Array.isArray(m.photos) && m.photos.length && photoCache[m.photos[0]])
             .sort((a, b) => a.id - b.id)
             .map(m => ({ id: m.id, dataUrl: photoCache[m.photos[0]] }));
     }
@@ -959,10 +963,13 @@
         if (photoCalMonth > 11) { photoCalMonth = 0; photoCalYear++; }
         renderPhotoCalendar();
     }
-    // 포토 캘린더 탭의 "+ 추가" — 메모 편집기를 열어 사진을 바로 등록 (텍스트 없이 사진만도 가능)
+    // 한컷 탭의 "+ 추가" — 메모 편집기를 열어 사진을 바로 등록 (텍스트 없이 사진만도 가능). 이 경로는 기본으로 한컷 연동 ON
     function addPhotoCalEntry() {
         openMemoEditor(null);
+        memoWorkingPhotoTabLinked = true;
+        renderMemoPhotoTabToggle();
     }
+
     // 그 날짜 칸 안쪽 마크업: 사진 개수에 따라 1장 꽉채움 / 2~3장 분할 / 4장+ 2x2 그리드(+더보기)
     function photoCellInner(dateStr, d, photos) {
         const n = photos.length;
@@ -2669,6 +2676,19 @@
     let editingMemoId = null, pendingMemoLink = null;
     let memoPickedDate = null, memoCalYear = 0, memoCalMonth = 0;
     let memoWorkingPhotos = []; // 편집 중 사진 id 목록
+    let memoWorkingPhotoTabLinked = false; // 이 메모를 한컷 탭에도 노출할지 (기본 OFF, 명시적 클릭으로만 ON)
+    function toggleMemoPhotoTabLink() {
+        memoWorkingPhotoTabLinked = !memoWorkingPhotoTabLinked;
+        renderMemoPhotoTabToggle();
+    }
+    function renderMemoPhotoTabToggle() {
+        const wrap = document.getElementById('memoPhotoTabLinkWrap');
+        const btn = document.getElementById('memoPhotoTabLinkBtn');
+        if (!wrap || !btn) return;
+        wrap.style.display = memoWorkingPhotos.length ? '' : 'none';
+        btn.classList.toggle('on', memoWorkingPhotoTabLinked);
+        btn.textContent = memoWorkingPhotoTabLinked ? '📷 한컷에 연동됨 · 탭하면 해제' : '📷 한컷에도 표시하기';
+    }
     async function addMemoPhotos(files) {
         if (!files || !files.length) return;
         const picked = Array.from(files); // 입력값을 비우기 전에 목록 보관
@@ -2698,6 +2718,7 @@
                 <img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}','${memoWorkingPhotos.join(',')}')">
                 <span class="del" onclick="removeMemoPhoto('${pid}')">✕</span>
             </div>`).join('');
+        renderMemoPhotoTabToggle();
     }
     let viewerPhotos = [], viewerIndex = 0;
     function openPhoto(pid, listStr) {
@@ -2845,6 +2866,7 @@
         editingMemoId = id;
         pendingMemoLink = link || null;
         const m = id ? memoStore.find(x => x.id === id) : null;
+        memoWorkingPhotoTabLinked = m ? !!m.viaPhotoTab : false; // 기존 메모는 저장된 연동 상태, 새 메모는 기본 OFF (addPhotoCalEntry가 이후 ON으로 덮어씀)
         document.getElementById('memoModalTitle').textContent = m ? '메모 수정' : '새 메모';
         memoPickedDate = m ? m.date : ((link && link.date) ? link.date : getTodayStr());
         const mb = new Date(parseDate(memoPickedDate));
@@ -2861,14 +2883,16 @@
         const text = document.getElementById('memoText').value.trim();
         const date = memoPickedDate || getTodayStr();
         if (!text && !memoWorkingPhotos.length) { showToast('메모 내용을 입력하거나, 사진을 추가해 주세요'); return; }
+        const linked = memoWorkingPhotos.length ? memoWorkingPhotoTabLinked : false; // 사진 없으면 연동 의미 없음
         if (editingMemoId) {
             const m = memoStore.find(x => x.id === editingMemoId);
-            if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); }
+            if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); m.viaPhotoTab = linked; }
         } else {
-            memoStore.push({ id: Date.now(), text, date, photos: memoWorkingPhotos.slice(), link: pendingMemoLink });
+            memoStore.push({ id: Date.now(), text, date, photos: memoWorkingPhotos.slice(), link: pendingMemoLink, viaPhotoTab: linked });
         }
         memoWorkingPhotos = [];
         editingMemoId = null; pendingMemoLink = null;
+        memoWorkingPhotoTabLinked = false;
         closeOverlay('memoOverlay');
         syncAll();
         showToast('📒 메모가 저장됐어요');
