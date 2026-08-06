@@ -948,10 +948,10 @@
     }
     // 그날 카테고리+사진이 붙은 메모 중 첫 번째 → 달력 칸 배경 사진용
     // 그날 사진이 있는 메모들 (카테고리 무관, 순서대로)
-    // 한컷 탭: viaPhotoTab이 true인 메모(한컷에서 추가했거나, 메모에서 명시적으로 연동한 것)만 노출
+    // 한컷 탭: origin이 'photocal'(한컷에서 추가)이거나, 메모 쪽에서 명시적으로 연동(crossLinked)한 것만 노출
     function dayPhotos(dateStr) {
         return memoStore
-            .filter(m => m.date === dateStr && m.viaPhotoTab && Array.isArray(m.photos) && m.photos.length && photoCache[m.photos[0]])
+            .filter(m => m.date === dateStr && (m.origin === 'photocal' || m.crossLinked) && Array.isArray(m.photos) && m.photos.length && photoCache[m.photos[0]])
             .sort((a, b) => a.id - b.id)
             .map(m => ({ id: m.id, dataUrl: photoCache[m.photos[0]] }));
     }
@@ -963,10 +963,10 @@
         if (photoCalMonth > 11) { photoCalMonth = 0; photoCalYear++; }
         renderPhotoCalendar();
     }
-    // 한컷 탭의 "+ 추가" — 메모 편집기를 열어 사진을 바로 등록 (텍스트 없이 사진만도 가능). 이 경로는 기본으로 한컷 연동 ON
+    // 한컷 탭의 "+ 추가" — 메모 편집기를 열어 사진을 바로 등록 (텍스트 없이 사진만도 가능). origin=photocal로 표시(메모 탭엔 기본 비노출)
     function addPhotoCalEntry() {
         openMemoEditor(null);
-        memoWorkingPhotoTabLinked = true;
+        memoWorkingOrigin = 'photocal';
         renderMemoPhotoTabToggle();
     }
 
@@ -2631,7 +2631,7 @@
         return memoStore.filter(m => m.link && m.link.taskId === taskId &&
             (pid === null ? m.link.kind === 'standalone' : m.link.projectId === pid));
     }
-    function memosOnDate(dateStr) { return memoStore.filter(m => m.date === dateStr); }
+    function memosOnDate(dateStr) { return memoStore.filter(m => m.date === dateStr && (m.origin !== 'photocal' || m.crossLinked)); }
     function memoLinkLabel(m) {
         if (!m.link) return '';
         return m.link.name || (m.link.kind === 'project' ? '프로젝트 할 일' : '단독 할 일');
@@ -2676,9 +2676,10 @@
     let editingMemoId = null, pendingMemoLink = null;
     let memoPickedDate = null, memoCalYear = 0, memoCalMonth = 0;
     let memoWorkingPhotos = []; // 편집 중 사진 id 목록
-    let memoWorkingPhotoTabLinked = false; // 이 메모를 한컷 탭에도 노출할지 (기본 OFF, 명시적 클릭으로만 ON)
+    let memoWorkingOrigin = 'memo'; // 새로 만들 때만 의미 있음: 'memo'(메모 탭) | 'photocal'(한컷 탭). 기존 메모는 저장된 origin 유지(수정 불가)
+    let memoWorkingCrossLinked = false; // 반대쪽 탭에도 노출할지 (기본 항상 OFF, 명시적 클릭으로만 ON)
     function toggleMemoPhotoTabLink() {
-        memoWorkingPhotoTabLinked = !memoWorkingPhotoTabLinked;
+        memoWorkingCrossLinked = !memoWorkingCrossLinked;
         renderMemoPhotoTabToggle();
     }
     function renderMemoPhotoTabToggle() {
@@ -2686,8 +2687,9 @@
         const btn = document.getElementById('memoPhotoTabLinkBtn');
         if (!wrap || !btn) return;
         wrap.style.display = memoWorkingPhotos.length ? '' : 'none';
-        btn.classList.toggle('on', memoWorkingPhotoTabLinked);
-        btn.textContent = memoWorkingPhotoTabLinked ? '📷 한컷에 연동됨 · 탭하면 해제' : '📷 한컷에도 표시하기';
+        btn.classList.toggle('on', memoWorkingCrossLinked);
+        const targetLabel = memoWorkingOrigin === 'photocal' ? '메모' : '한컷';
+        btn.textContent = memoWorkingCrossLinked ? `🔗 ${targetLabel}에도 연동됨 · 탭하면 해제` : `🔗 ${targetLabel}에도 표시하기`;
     }
     async function addMemoPhotos(files) {
         if (!files || !files.length) return;
@@ -2866,7 +2868,8 @@
         editingMemoId = id;
         pendingMemoLink = link || null;
         const m = id ? memoStore.find(x => x.id === id) : null;
-        memoWorkingPhotoTabLinked = m ? !!m.viaPhotoTab : false; // 기존 메모는 저장된 연동 상태, 새 메모는 기본 OFF (addPhotoCalEntry가 이후 ON으로 덮어씀)
+        memoWorkingOrigin = m ? (m.origin || 'memo') : 'memo'; // 새 메모 기본은 'memo'(한컷의 +추가가 이후 'photocal'로 덮어씀); 기존 메모는 origin 고정
+        memoWorkingCrossLinked = m ? !!m.crossLinked : false; // 기존 메모는 저장된 연동 상태, 새 메모는 기본 OFF
         document.getElementById('memoModalTitle').textContent = m ? '메모 수정' : '새 메모';
         memoPickedDate = m ? m.date : ((link && link.date) ? link.date : getTodayStr());
         const mb = new Date(parseDate(memoPickedDate));
@@ -2883,16 +2886,17 @@
         const text = document.getElementById('memoText').value.trim();
         const date = memoPickedDate || getTodayStr();
         if (!text && !memoWorkingPhotos.length) { showToast('메모 내용을 입력하거나, 사진을 추가해 주세요'); return; }
-        const linked = memoWorkingPhotos.length ? memoWorkingPhotoTabLinked : false; // 사진 없으면 연동 의미 없음
+        const linked = memoWorkingPhotos.length ? memoWorkingCrossLinked : false; // 사진 없으면 연동 의미 없음
         if (editingMemoId) {
             const m = memoStore.find(x => x.id === editingMemoId);
-            if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); m.viaPhotoTab = linked; }
+            if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); m.crossLinked = linked; }
         } else {
-            memoStore.push({ id: Date.now(), text, date, photos: memoWorkingPhotos.slice(), link: pendingMemoLink, viaPhotoTab: linked });
+            memoStore.push({ id: Date.now(), text, date, photos: memoWorkingPhotos.slice(), link: pendingMemoLink, origin: memoWorkingOrigin, crossLinked: linked });
         }
         memoWorkingPhotos = [];
         editingMemoId = null; pendingMemoLink = null;
-        memoWorkingPhotoTabLinked = false;
+        memoWorkingOrigin = 'memo';
+        memoWorkingCrossLinked = false;
         closeOverlay('memoOverlay');
         syncAll();
         showToast('📒 메모가 저장됐어요');
@@ -2973,11 +2977,12 @@
         showToast('연결을 해제했어요');
     }
     function renderMemoTab() {
-        document.getElementById('memoTotalCount').textContent = `(${memoStore.length})`;
+        const visible = memoStore.filter(m => m.origin !== 'photocal' || m.crossLinked);
+        document.getElementById('memoTotalCount').textContent = `(${visible.length})`;
         const el = document.getElementById('memoList');
-        if (memoStore.length === 0) { el.innerHTML = '<div class="empty">작성된 메모가 없어요</div>'; return; }
+        if (visible.length === 0) { el.innerHTML = '<div class="empty">작성된 메모가 없어요</div>'; return; }
         const q = (document.getElementById('memoSearch')?.value || '').trim().toLowerCase();
-        const list = memoStore.filter(m => !q || m.text.toLowerCase().includes(q) || memoLinkLabel(m).toLowerCase().includes(q))
+        const list = visible.filter(m => !q || m.text.toLowerCase().includes(q) || memoLinkLabel(m).toLowerCase().includes(q))
             .slice().sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')) || b.id - a.id);
         if (list.length === 0) { el.innerHTML = '<div class="empty">검색 결과가 없어요</div>'; return; }
         el.innerHTML = `<div style="font-size:11px; color:var(--gray); margin-bottom:6px;">${q ? `검색 ${list.length}개` : `전체 ${list.length}개`}</div>` +
