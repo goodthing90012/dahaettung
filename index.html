@@ -112,6 +112,14 @@
         .cal-bars { position: absolute; left: 3px; right: 3px; bottom: 3px; display: flex; flex-direction: column; gap: 2px; }
         .cal-bar { height: 4px; }
         .cal-today { background: var(--primary); color: white; font-weight: bold; }
+        .cal-photo-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%); pointer-events: none; }
+        .photo-daynum { position: absolute; top: 3px; left: 4px; z-index: 2; font-size: 10px; font-weight: bold; color: #fff; background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 6px; line-height: 1.5; }
+        .photo-fill { position: absolute; inset: 0; background-size: cover; background-position: center; cursor: pointer; }
+        .photo-split { position: absolute; inset: 0; display: flex; gap: 1px; }
+        .photo-strip { flex: 1; height: 100%; background-size: cover; background-position: center; cursor: pointer; }
+        .photo-grid4 { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; }
+        .photo-quad { position: relative; background-size: cover; background-position: center; cursor: pointer; }
+        .photo-more-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; }
 
         .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--gray); margin-top: 12px; justify-content: center; }
         .legend span { display: inline-flex; align-items: center; gap: 4px; line-height: 1; }
@@ -389,6 +397,18 @@
         </div>
     </div>
 
+    <div id="tab-photocal" class="content" style="padding:10px;">
+        <div class="card" style="padding:8px;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                <button class="cal-nav-btn" onclick="changePhotoCalMonth(-1)">‹</button>
+                <div class="cal-month" id="photoCalMonthLabel" style="flex:1; text-align:center;"></div>
+                <button class="cal-nav-btn" onclick="changePhotoCalMonth(1)">›</button>
+                <button class="btn btn-primary btn-sm" style="flex:0 0 auto; width:auto; padding:7px 14px; white-space:nowrap;" onclick="addPhotoCalEntry()">+ 추가</button>
+            </div>
+            <div id="photoCalGrid"></div>
+        </div>
+    </div>
+
     <div id="tab-settings" class="content">
         <div class="card">
             <div class="section-title">💾 데이터 백업</div>
@@ -413,6 +433,7 @@
         <div class="tab-item active" id="btn-home" onclick="switchTab('home')"><span class="tab-icon">🏠</span><span>홈</span></div>
         <div class="tab-item" id="btn-check" onclick="switchTab('check')"><span class="tab-icon">✅</span><span>체크</span></div>
         <div class="tab-item" id="btn-memo" onclick="switchTab('memo')"><span class="tab-icon">📒</span><span>메모</span></div>
+        <div class="tab-item" id="btn-photocal" onclick="switchTab('photocal')"><span class="tab-icon">📷</span><span>한컷</span></div>
         <div class="tab-item" id="btn-manage" onclick="switchTab('manage')"><span class="tab-icon">🗂️</span><span>관리</span></div>
         <div class="tab-item" id="btn-settings" onclick="switchTab('settings')"><span class="tab-icon">⚙️</span><span>설정</span></div>
     </div>
@@ -586,6 +607,7 @@
         </div>
     </div>
 </div>
+
 
 <!-- 사진 뷰어 -->
 <div class="overlay" id="photoViewer" style="background:rgba(0,0,0,0.93); flex-direction:column;">
@@ -873,12 +895,13 @@
         renderWeekdayMng();
         renderProjectMng();
         if (document.getElementById('tab-home').classList.contains('active')) renderHome();
+        if (document.getElementById('tab-photocal').classList.contains('active')) renderPhotoCalendar();
     }
 
     let currentTab = 'home';
     function switchTab(name) {
         currentTab = name;
-        ['home','check','memo','manage','settings'].forEach(t => {
+        ['home','check','memo','photocal','manage','settings'].forEach(t => {
             document.getElementById('tab-' + t).classList.toggle('active', t === name);
             document.getElementById('btn-' + t).classList.toggle('active', t === name);
         });
@@ -886,6 +909,7 @@
         if (name === 'home') renderHome();
         if (name === 'check') renderCheckTab();
         if (name === 'memo') renderMemoTab();
+        if (name === 'photocal') renderPhotoCalendar();
         if (name === 'manage') { renderRoutineMng(); renderCycleMng(); renderWeekdayMng(); renderProjectMng(); }
         if (name === 'settings') updateLastSavedLabel();
     }
@@ -918,6 +942,63 @@
         document.getElementById('briefingPreview').innerHTML =
             `<span>${prevLabel} · 오늘 ${countDone(tTasks)}/${tTasks.length}</span><span class="go">브리핑 보기 ›</span>`;
         renderCalendar();
+    }
+    // 그날 카테고리+사진이 붙은 메모 중 첫 번째 → 달력 칸 배경 사진용
+    // 그날 사진이 있는 메모들 (카테고리 무관, 순서대로)
+    function dayPhotos(dateStr) {
+        return memoStore
+            .filter(m => m.date === dateStr && Array.isArray(m.photos) && m.photos.length && photoCache[m.photos[0]])
+            .sort((a, b) => a.id - b.id)
+            .map(m => ({ id: m.id, dataUrl: photoCache[m.photos[0]] }));
+    }
+    // ── 포토 캘린더 (홈 달력과 별개 전용 탭) ──
+    let photoCalYear = new Date().getFullYear(), photoCalMonth = new Date().getMonth();
+    function changePhotoCalMonth(delta) {
+        photoCalMonth += delta;
+        if (photoCalMonth < 0) { photoCalMonth = 11; photoCalYear--; }
+        if (photoCalMonth > 11) { photoCalMonth = 0; photoCalYear++; }
+        renderPhotoCalendar();
+    }
+    // 포토 캘린더 탭의 "+ 추가" — 메모 편집기를 열어 사진을 바로 등록 (텍스트 없이 사진만도 가능)
+    function addPhotoCalEntry() {
+        openMemoEditor(null);
+    }
+    // 그 날짜 칸 안쪽 마크업: 사진 개수에 따라 1장 꽉채움 / 2~3장 분할 / 4장+ 2x2 그리드(+더보기)
+    function photoCellInner(dateStr, d, photos) {
+        const n = photos.length;
+        if (n === 0) return `<div class="daynum" style="font-size:11px; opacity:.4;">${d}</div>`;
+        const badge = `<span class="photo-daynum">${d}</span>`;
+        if (n === 1) {
+            return `<div class="photo-fill" style="background-image:url('${photos[0].dataUrl}');" onclick="openMemoView(${photos[0].id})"></div><div class="cal-photo-scrim"></div>${badge}`;
+        }
+        if (n <= 3) {
+            const strips = photos.map(p => `<div class="photo-strip" style="background-image:url('${p.dataUrl}');" onclick="openMemoView(${p.id})"></div>`).join('');
+            return `<div class="photo-split">${strips}</div>${badge}`;
+        }
+        const shown = photos.slice(0, 4);
+        const extra = n - 4;
+        const quads = shown.map((p, i) => {
+            if (i === 3 && extra > 0) {
+                return `<div class="photo-quad" style="background-image:url('${p.dataUrl}');" onclick="showDateDetail('${dateStr}')"><div class="photo-more-overlay">+${extra}</div></div>`;
+            }
+            return `<div class="photo-quad" style="background-image:url('${p.dataUrl}');" onclick="openMemoView(${p.id})"></div>`;
+        }).join('');
+        return `<div class="photo-grid4">${quads}</div>${badge}`;
+    }
+    function renderPhotoCalendar() {
+        document.getElementById('photoCalMonthLabel').textContent = `${photoCalYear}년 ${photoCalMonth+1}월`;
+        const firstDay = new Date(photoCalYear, photoCalMonth, 1).getDay();
+        const daysInMonth = new Date(photoCalYear, photoCalMonth+1, 0).getDate();
+        let html = '<div class="cal-grid">';
+        ['일','월','화','수','목','금','토'].forEach(d => html += `<div class="cal-dow">${d}</div>`);
+        for (let i = 0; i < firstDay; i++) html += '<div></div>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${photoCalYear}-${String(photoCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const photos = dayPhotos(dateStr);
+            html += `<div class="cal-cell" style="min-height:98px; padding:0; overflow:hidden;">${photoCellInner(dateStr, d, photos)}</div>`;
+        }
+        html += '</div>';
+        document.getElementById('photoCalGrid').innerHTML = html;
     }
     function renderCalendar() {
         const el = document.getElementById('calGrid');
@@ -1041,8 +1122,14 @@
         if (dayMemos.length) {
             rows += `<div class="detail-row" style="font-weight:bold; cursor:default;"><span>📒</span><span style="flex:1;">메모 ${dayMemos.length}개</span></div>`;
             dayMemos.forEach(m => {
-                rows += `<div class="detail-row" onclick="closeOverlay('dateDetailOverlay'); openMemoView(${m.id});" style="padding-left:22px;">
-                    <span style="flex:1; font-size:13px; color:#666; white-space:pre-wrap; word-break:break-word;">${escapeHtml(m.text)}</span>
+                const thumbs = (m.photos && m.photos.length)
+                    ? `<div style="display:flex; gap:4px; margin-top:4px;">${m.photos.slice(0,4).map(pid => `<img src="${photoCache[pid]||''}" style="width:40px; height:40px; object-fit:cover; border-radius:6px;">`).join('')}${m.photos.length>4?`<span style="font-size:11px; color:#aaa; align-self:center;">+${m.photos.length-4}</span>`:''}</div>`
+                    : '';
+                rows += `<div class="detail-row" onclick="closeOverlay('dateDetailOverlay'); openMemoView(${m.id});" style="padding-left:22px; align-items:flex-start;">
+                    <div style="flex:1;">
+                        <div style="font-size:13px; color:#666; white-space:pre-wrap; word-break:break-word;">${escapeHtml(m.text) || '<span style=\"color:#bbb;\">📷 사진</span>'}</div>
+                        ${thumbs}
+                    </div>
                 </div>`;
             });
         }
@@ -2559,7 +2646,7 @@
         document.getElementById('memoViewDate').textContent = krLabel(m.date);
         document.getElementById('memoViewLink').innerHTML = m.link
             ? `<span class="memo-view-link" style="cursor:pointer;" onclick="openLinkedTask(${m.id})">🔗 ${escapeHtml(memoLinkLabel(m))} <span style="opacity:.7;">›</span></span>` : '';
-        document.getElementById('memoViewText').textContent = m.text;
+        document.getElementById('memoViewText').textContent = m.text || '📷 사진';
         document.getElementById('memoViewPhotos').innerHTML = (m.photos || [])
             .map(pid => `<img src="${photoCache[pid] || ''}" onclick="openPhoto('${pid}','${(m.photos || []).join(',')}')">`).join('');
         openOverlay('memoViewOverlay');
@@ -2773,7 +2860,7 @@
     function saveMemoEntry() {
         const text = document.getElementById('memoText').value.trim();
         const date = memoPickedDate || getTodayStr();
-        if (!text) { showToast('메모 내용을 입력해 주세요'); return; }
+        if (!text && !memoWorkingPhotos.length) { showToast('메모 내용을 입력하거나, 사진을 추가해 주세요'); return; }
         if (editingMemoId) {
             const m = memoStore.find(x => x.id === editingMemoId);
             if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); }
@@ -2874,7 +2961,7 @@
             <div class="memo-card">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                     <div style="flex:1; cursor:pointer;" onclick="openMemoView(${m.id})">
-                        <div class="memo-body">${escapeHtml(m.text)}</div>
+                        <div class="memo-body">${m.text ? escapeHtml(m.text) : '<span style="color:#bbb;">📷 사진</span>'}</div>
                         ${(m.photos && m.photos.length) ? `<div class="memo-photos">${m.photos.map(pid => `<img src="${photoCache[pid] || ''}" onclick="event.stopPropagation(); openPhoto('${pid}','${m.photos.join(',')}')">`).join('')}</div>` : ''}
                         <div class="memo-meta">${m.date}${(m.photos && m.photos.length) ? ` · 📷 ${m.photos.length}` : ''}${m.link ? ` · 🔗 ${escapeHtml(memoLinkLabel(m))}` : ''}</div>
                     </div>
@@ -2971,6 +3058,8 @@
         window._toastTimer = setTimeout(() => t.style.display = 'none', 2200);
     }
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    // 문자열을 작은따옴표 JS 리터럴로 안전하게 (onclick="..." 속성 안에 넣을 때 사용 — 큰따옴표 충돌 방지)
+    function jsStrLit(s) { return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
 
     // ══════════ 초기화 ══════════
     window.onload = async () => {
