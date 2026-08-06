@@ -113,7 +113,8 @@
         .cal-bar { height: 4px; }
         .cal-today { background: var(--primary); color: white; font-weight: bold; }
         .cal-photo-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%); pointer-events: none; }
-        .photo-daynum { position: absolute; top: 3px; left: 4px; z-index: 2; font-size: 10px; font-weight: bold; color: #fff; background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 6px; line-height: 1.5; }
+        .photo-daynum { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 10px; font-weight: bold; color: #fff; background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 6px; line-height: 1.5; }
+        .plain-daynum { position: absolute; top: 3px; right: 4px; font-size: 10px; font-weight: bold; color: #bbb; padding: 1px 5px; line-height: 1.5; }
         .photo-fill { position: absolute; inset: 0; background-size: cover; background-position: center; cursor: pointer; }
         .photo-split { position: absolute; inset: 0; display: flex; gap: 1px; }
         .photo-strip { flex: 1; height: 100%; background-size: cover; background-position: center; cursor: pointer; }
@@ -975,7 +976,7 @@
     // 그 날짜 칸 안쪽 마크업: 사진 개수에 따라 1장 꽉채움 / 2~3장 분할 / 4장+ 2x2 그리드(+더보기)
     function photoCellInner(dateStr, d, photos) {
         const n = photos.length;
-        if (n === 0) return `<div class="daynum" style="font-size:11px; opacity:.4;">${d}</div>`;
+        if (n === 0) return `<div class="plain-daynum">${d}</div>`;
         const badge = `<span class="photo-daynum">${d}</span>`;
         if (n === 1) {
             return `<div class="photo-fill" style="background-image:url('${photos[0].dataUrl}');" onclick="openMemoView(${photos[0].id})"></div><div class="cal-photo-scrim"></div>${badge}`;
