@@ -1075,8 +1075,10 @@
     }
     async function buildMonthImageCanvas(year, month) {
         // 실제 앱(한컷 탭) CSS 수치를 그대로 반영: content padding 10 + card padding 8, cal-grid gap 4, cal-cell min-height 98
-        const COLS = 7, W = 390, OUTER_PAD = 18, GRID_GAP = 4, CELL_H = 98, DOW_H = 20, HEADER = 54, FOOTER = 30;
-        const CELL_W = (W - OUTER_PAD * 2 - GRID_GAP * (COLS - 1)) / COLS;
+        const COLS = 7, W_TARGET = 410, OUTER_PAD = 28, GRID_GAP = 4, CELL_H = 98, DOW_H = 20, HEADER = 54, FOOTER = 30;
+        // 칸 너비를 정수로 반올림한 뒤 그 값으로 전체 폭을 재계산 — 소수점 픽셀로 인한 경계 흐림/미세한 어긋남 방지
+        const CELL_W = Math.round((W_TARGET - OUTER_PAD * 2 - GRID_GAP * (COLS - 1)) / COLS);
+        const W = OUTER_PAD * 2 + GRID_GAP * (COLS - 1) + CELL_W * COLS;
         const firstDay = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const rows = Math.ceil((firstDay + daysInMonth) / COLS);
