@@ -1074,11 +1074,12 @@
         ctx.closePath();
     }
     async function buildMonthImageCanvas(year, month, measured) {
-        // 추측 대신 실제 화면에 렌더링된 칸 크기를 그대로 사용 (기기마다 다를 수 있어서 실측이 정확함)
-        const COLS = 7, GRID_GAP = 4, DOW_H = 20, HEADER = 60, FOOTER = 30;
-        const OUTER_PAD = Math.round(measured.pad);
-        const CELL_W = Math.round(measured.cellW);
-        const CELL_H = Math.round(measured.cellH);
+        // 칸 높이(98)는 우리가 직접 min-height로 고정한 값이라 상수로 확정 — 측정이 필요한 건 기기마다 다른 폭/여백뿐
+        const COLS = 7, GRID_GAP = 4, DOW_H = 20, HEADER = 60, FOOTER = 30, CELL_H = 98;
+        // 실측값이 비정상적으로 크거나 작으면(레이아웃 타이밍 등으로 잘못 잡힐 경우 대비) 안전 범위로 clamp
+        const clamp = (v, lo, hi, fallback) => (typeof v === 'number' && isFinite(v) && v > 0) ? Math.min(hi, Math.max(lo, v)) : fallback;
+        const OUTER_PAD = Math.round(clamp(measured.pad, 8, 40, 18));
+        const CELL_W = Math.round(clamp(measured.cellW, 30, 100, 55));
         const W = OUTER_PAD * 2 + GRID_GAP * (COLS - 1) + CELL_W * COLS;
         const firstDay = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1185,15 +1186,14 @@
         if (list.length === 0) { showToast('이 달엔 공유할 사진이 없어요'); return; }
         showToast('이미지 만드는 중…');
         try {
-            // 실제 화면에 지금 그려진 칸의 실측 크기를 그대로 사용 (기기마다 다른 화면 폭에 정확히 맞음)
+            // 실제 화면의 칸 폭/여백만 실측(기기마다 다름). 높이는 우리가 고정한 값이라 측정 안 함
             const gridEl = document.getElementById('photoCalGrid');
             const cellEl = gridEl ? gridEl.querySelector('.cal-cell') : null;
             const cardEl = gridEl ? gridEl.closest('.card') : null;
             const measured = (cellEl && cardEl) ? {
                 cellW: cellEl.getBoundingClientRect().width,
-                cellH: cellEl.getBoundingClientRect().height,
                 pad: cellEl.getBoundingClientRect().left - cardEl.getBoundingClientRect().left
-            } : { cellW: 55, cellH: 98, pad: 18 }; // 측정 실패시 안전한 기본값
+            } : { cellW: 55, pad: 18 }; // 측정 실패시 안전한 기본값
             const canvas = await buildMonthImageCanvas(photoCalYear, photoCalMonth, measured);
             canvas.toBlob(async (blob) => {
                 if (!blob) { showToast('이미지 생성에 실패했어요'); return; }
