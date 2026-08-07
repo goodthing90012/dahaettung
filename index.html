@@ -1073,11 +1073,12 @@
         ctx.arcTo(x, y, x + w, y, r);
         ctx.closePath();
     }
-    async function buildMonthImageCanvas(year, month) {
-        // 실제 앱(한컷 탭) CSS 수치를 그대로 반영: content padding 10 + card padding 8, cal-grid gap 4, cal-cell min-height 98
-        const COLS = 7, W_TARGET = 410, OUTER_PAD = 28, GRID_GAP = 4, CELL_H = 98, DOW_H = 20, HEADER = 54, FOOTER = 30;
-        // 칸 너비를 정수로 반올림한 뒤 그 값으로 전체 폭을 재계산 — 소수점 픽셀로 인한 경계 흐림/미세한 어긋남 방지
-        const CELL_W = Math.round((W_TARGET - OUTER_PAD * 2 - GRID_GAP * (COLS - 1)) / COLS);
+    async function buildMonthImageCanvas(year, month, measured) {
+        // 추측 대신 실제 화면에 렌더링된 칸 크기를 그대로 사용 (기기마다 다를 수 있어서 실측이 정확함)
+        const COLS = 7, GRID_GAP = 4, DOW_H = 20, HEADER = 60, FOOTER = 30;
+        const OUTER_PAD = Math.round(measured.pad);
+        const CELL_W = Math.round(measured.cellW);
+        const CELL_H = Math.round(measured.cellH);
         const W = OUTER_PAD * 2 + GRID_GAP * (COLS - 1) + CELL_W * COLS;
         const firstDay = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -1092,7 +1093,10 @@
             const photos = dayPhotos(dateStr);
             days.push({ d, emo: dayEmoji[dateStr] || null, photoUrl: photos[0] ? photos[0].dataUrl : null });
         }
-        const loaded = await Promise.all(days.map(async c => ({ ...c, img: c.photoUrl ? await loadImageEl(c.photoUrl) : null })));
+        const [loaded, logoImg] = await Promise.all([
+            Promise.all(days.map(async c => ({ ...c, img: c.photoUrl ? await loadImageEl(c.photoUrl) : null }))),
+            loadImageEl('logo.png')
+        ]);
 
         const canvas = document.createElement('canvas');
         canvas.width = W * dpr; canvas.height = H * dpr;
@@ -1102,13 +1106,15 @@
         ctx.fillRect(0, 0, W, H);
 
         ctx.textBaseline = 'alphabetic';
+        // 실제 앱 헤더와 동일하게 로고(마스코트+워드마크) 이미지를 그대로 사용
+        if (logoImg) {
+            const logoH = 30, logoW = logoImg.width * (logoH / logoImg.height);
+            ctx.drawImage(logoImg, OUTER_PAD, 10, logoW, logoH);
+        }
         ctx.fillStyle = '#222';
-        ctx.font = 'bold 22px -apple-system, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillText(`${year}년 ${month + 1}월`, OUTER_PAD, 32);
-        ctx.font = '12px -apple-system, sans-serif';
-        ctx.fillStyle = '#2f9e6e';
-        ctx.fillText('한컷', OUTER_PAD, 48);
+        ctx.font = 'bold 15px -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${year}년 ${month + 1}월 · 한컷`, W - OUTER_PAD, 30);
 
         // 요일 라벨 행 (실제 앱의 cal-dow와 동일하게)
         const dowLabels = ['일', '월', '화', '수', '목', '금', '토'];
@@ -1179,7 +1185,16 @@
         if (list.length === 0) { showToast('이 달엔 공유할 사진이 없어요'); return; }
         showToast('이미지 만드는 중…');
         try {
-            const canvas = await buildMonthImageCanvas(photoCalYear, photoCalMonth);
+            // 실제 화면에 지금 그려진 칸의 실측 크기를 그대로 사용 (기기마다 다른 화면 폭에 정확히 맞음)
+            const gridEl = document.getElementById('photoCalGrid');
+            const cellEl = gridEl ? gridEl.querySelector('.cal-cell') : null;
+            const cardEl = gridEl ? gridEl.closest('.card') : null;
+            const measured = (cellEl && cardEl) ? {
+                cellW: cellEl.getBoundingClientRect().width,
+                cellH: cellEl.getBoundingClientRect().height,
+                pad: cellEl.getBoundingClientRect().left - cardEl.getBoundingClientRect().left
+            } : { cellW: 55, cellH: 98, pad: 18 }; // 측정 실패시 안전한 기본값
+            const canvas = await buildMonthImageCanvas(photoCalYear, photoCalMonth, measured);
             canvas.toBlob(async (blob) => {
                 if (!blob) { showToast('이미지 생성에 실패했어요'); return; }
                 const fname = `다했텅-한컷-${photoCalYear}-${String(photoCalMonth+1).padStart(2,'0')}.png`;
