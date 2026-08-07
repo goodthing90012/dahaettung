@@ -1074,13 +1074,15 @@
         ctx.closePath();
     }
     async function buildMonthImageCanvas(year, month) {
-        const COLS = 7, CELL = 100, GAP = 3, PAD = 14, HEADER = 56, FOOTER = 34;
+        // 실제 앱(한컷 탭) CSS 수치를 그대로 반영: content padding 10 + card padding 8, cal-grid gap 4, cal-cell min-height 98
+        const COLS = 7, W = 390, OUTER_PAD = 18, GRID_GAP = 4, CELL_H = 98, DOW_H = 20, HEADER = 54, FOOTER = 30;
+        const CELL_W = (W - OUTER_PAD * 2 - GRID_GAP * (COLS - 1)) / COLS;
         const firstDay = new Date(year, month, 1).getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         const rows = Math.ceil((firstDay + daysInMonth) / COLS);
         const dpr = 2;
-        const W = PAD * 2 + COLS * CELL;
-        const H = HEADER + rows * CELL + PAD + FOOTER;
+        const gridTop = HEADER + DOW_H + 8;
+        const H = gridTop + rows * CELL_H + (rows - 1) * GRID_GAP + OUTER_PAD + FOOTER;
 
         const days = [];
         for (let d = 1; d <= daysInMonth; d++) {
@@ -1101,30 +1103,40 @@
         ctx.fillStyle = '#222';
         ctx.font = 'bold 22px -apple-system, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`${year}년 ${month + 1}월`, PAD, 32);
+        ctx.fillText(`${year}년 ${month + 1}월`, OUTER_PAD, 32);
         ctx.font = '12px -apple-system, sans-serif';
         ctx.fillStyle = '#2f9e6e';
-        ctx.fillText('한컷', PAD, 48);
+        ctx.fillText('한컷', OUTER_PAD, 48);
+
+        // 요일 라벨 행 (실제 앱의 cal-dow와 동일하게)
+        const dowLabels = ['일', '월', '화', '수', '목', '금', '토'];
+        ctx.font = 'bold 10px -apple-system, sans-serif';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        dowLabels.forEach((label, i) => {
+            const cx = OUTER_PAD + i * (CELL_W + GRID_GAP) + CELL_W / 2;
+            ctx.fillText(label, cx, HEADER + DOW_H - 5);
+        });
 
         loaded.forEach((c, idx) => {
             const pos = firstDay + idx;
             const col = pos % COLS, row = Math.floor(pos / COLS);
-            const x = PAD + col * CELL, y = HEADER + row * CELL;
-            const size = CELL - GAP;
+            const x = OUTER_PAD + col * (CELL_W + GRID_GAP);
+            const y = gridTop + row * (CELL_H + GRID_GAP);
 
             if (c.img) {
                 const iw = c.img.width, ih = c.img.height;
-                const scale = Math.max(size / iw, size / ih);
-                const sw = size / scale, sh = size / scale;
+                const scale = Math.max(CELL_W / iw, CELL_H / ih);
+                const sw = CELL_W / scale, sh = CELL_H / scale;
                 const sx = (iw - sw) / 2, sy = (ih - sh) / 2;
                 ctx.save();
-                roundRectPath(ctx, x, y, size, size, 8);
+                roundRectPath(ctx, x, y, CELL_W, CELL_H, 8);
                 ctx.clip();
-                ctx.drawImage(c.img, sx, sy, sw, sh, x, y, size, size);
+                ctx.drawImage(c.img, sx, sy, sw, sh, x, y, CELL_W, CELL_H);
                 ctx.restore();
             } else {
                 ctx.fillStyle = '#f2f2f2';
-                roundRectPath(ctx, x, y, size, size, 8);
+                roundRectPath(ctx, x, y, CELL_W, CELL_H, 8);
                 ctx.fill();
             }
 
@@ -1133,7 +1145,7 @@
             const label = String(c.d);
             if (c.img) {
                 const tw = ctx.measureText(label).width;
-                const chipW = tw + 8, chipH = 14, chipX = x + size - chipW - 3, chipY = y + 3;
+                const chipW = tw + 8, chipH = 14, chipX = x + CELL_W - chipW - 3, chipY = y + 3;
                 ctx.fillStyle = 'rgba(0,0,0,0.4)';
                 roundRectPath(ctx, chipX, chipY, chipW, chipH, 6);
                 ctx.fill();
@@ -1143,13 +1155,13 @@
             } else {
                 ctx.fillStyle = '#bbb';
                 ctx.textAlign = 'right';
-                ctx.fillText(label, x + size - 4, y + 14);
+                ctx.fillText(label, x + CELL_W - 4, y + 14);
             }
             // 이모지 (좌하단)
             if (c.emo) {
-                ctx.font = '15px -apple-system, sans-serif';
+                ctx.font = '14px -apple-system, sans-serif';
                 ctx.textAlign = 'left';
-                ctx.fillText(c.emo, x + 4, y + size - 5);
+                ctx.fillText(c.emo, x + 3, y + CELL_H - 5);
             }
         });
 
