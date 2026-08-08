@@ -116,12 +116,8 @@
         .photo-daynum { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 10px; font-weight: bold; color: #fff; background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 6px; line-height: 1.5; }
         .plain-daynum { position: absolute; top: 3px; right: 4px; font-size: 10px; font-weight: bold; color: #bbb; padding: 1px 5px; line-height: 1.5; }
         .day-emoji-badge { position: absolute; bottom: 3px; left: 4px; z-index: 2; font-size: 15px; line-height: 1; cursor: pointer; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+        .photo-count-badge { position: absolute; top: 3px; left: 4px; z-index: 2; font-size: 10px; font-weight: bold; color: #fff; background: rgba(0,0,0,.4); padding: 1px 5px; border-radius: 6px; line-height: 1.5; }
         .photo-fill { position: absolute; inset: 0; background-size: cover; background-position: center; cursor: pointer; }
-        .photo-split { position: absolute; inset: 0; display: flex; gap: 1px; }
-        .photo-strip { position: relative; flex: 1; height: 100%; background-size: cover; background-position: center; cursor: pointer; }
-        .photo-grid4 { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; }
-        .photo-quad { position: relative; background-size: cover; background-position: center; cursor: pointer; }
-        .photo-more-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; }
 
         .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--gray); margin-top: 12px; justify-content: center; }
         .legend span { display: inline-flex; align-items: center; gap: 4px; line-height: 1; }
@@ -171,6 +167,11 @@
         .photo-thumb .del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .photo-thumb .cover-badge { position: absolute; bottom: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .photo-thumb .cover-badge.on { background: rgba(255,193,7,0.9); color: #7a5200; cursor: default; }
+        .gallery-thumb { position: relative; border-radius: 10px; overflow: hidden; aspect-ratio: 1; }
+        .gallery-thumb img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; display: block; }
+        .gallery-thumb .cover-badge { position: absolute; bottom: 5px; left: 5px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; font-size: 15px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .gallery-thumb .cover-badge.on { background: rgba(255,193,7,0.92); color: #7a5200; }
+        .gallery-thumb .gallery-emoji { position: absolute; top: 5px; right: 5px; font-size: 16px; cursor: pointer; filter: drop-shadow(0 1px 2px rgba(0,0,0,.4)); }
         .memo-photos { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
         .memo-photos img { width: 56px; height: 56px; object-fit: cover; border-radius: 7px; cursor: pointer; }
         .memo-view-text { font-size: 15px; line-height: 1.7; color: var(--text); white-space: pre-wrap; word-break: break-word; }
@@ -620,6 +621,22 @@
     </div>
 </div>
 
+<!-- 그 날짜의 사진 여러 장 보기 + 대표 사진 고르기 -->
+<div class="overlay" id="dayPhotosOverlay">
+    <div class="briefing-fs">
+        <div class="brief-header">
+            <div class="brief-header-top">
+                <span class="brief-header-label" id="dayPhotosTitle">사진들</span>
+                <button class="brief-close" onclick="closeOverlay('dayPhotosOverlay')">✕</button>
+            </div>
+        </div>
+        <div class="brief-body">
+            <p style="font-size:12px; color:var(--gray); margin:0 0 10px;">⭐를 탭하면 달력 대표 사진으로 지정돼요</p>
+            <div id="dayPhotosGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;"></div>
+        </div>
+    </div>
+</div>
+
 <!-- 메모 자세히 보기 (전체화면) -->
 <div class="overlay" id="memoViewOverlay">
     <div class="briefing-fs">
@@ -811,7 +828,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -835,6 +852,7 @@
     let weekdayRoutines = (saved && Array.isArray(saved.weekdayRoutines)) ? saved.weekdayRoutines : [];
     let memoStore = (saved && Array.isArray(saved.memoStore)) ? saved.memoStore : [];
     let dayEmoji = (saved && saved.dayEmoji && typeof saved.dayEmoji === 'object') ? saved.dayEmoji : {}; // { '2026-08-06': '🚴‍♂️' }
+    let dayCoverMemo = (saved && saved.dayCoverMemo && typeof saved.dayCoverMemo === 'object') ? saved.dayCoverMemo : {}; // { '2026-08-06': memoId } 그 날짜의 대표(커버) 사진으로 쓸 메모
 
     // 기존에 흩어져 있던 메모들을 메모 창고로 1회 이전 (데이터 손실 방지)
     function migrateMemosToStore() {
@@ -1009,29 +1027,23 @@
     }
 
     // 그 날짜 칸 안쪽 마크업: 사진 개수에 따라 1장 꽉채움 / 2~3장 분할 / 4장+ 2x2 그리드(+더보기). 이모지는 사진(메모)마다 각자 것
+    // 그 날짜의 대표(커버) 사진 — 명시적으로 지정한 게 있으면 그것, 없으면 첫 번째(가장 먼저 등록한 것)
+    function dayCoverPhoto(dateStr, photos) {
+        const list = photos || dayPhotos(dateStr);
+        if (!list.length) return null;
+        const pickId = dayCoverMemo[dateStr];
+        return (pickId && list.find(p => p.id === pickId)) || list[0];
+    }
+    // 그 날짜 칸 안쪽 마크업: 사진이 몇 장이든 대표 사진 1장만 꽉 채워서 보여줌. 여러 장이면 탭했을 때 갤러리로, 1장이면 바로 그 메모로
     function photoCellInner(dateStr, d, photos) {
         const n = photos.length;
         if (n === 0) return `<div class="plain-daynum">${d}</div>`;
+        const cover = dayCoverPhoto(dateStr, photos);
         const badge = `<span class="photo-daynum">${d}</span>`;
-        const matches = (p) => !photoCalEmojiFilter || p.emo === photoCalEmojiFilter;
-        const dimStyle = (p) => matches(p) ? '' : ' opacity:.18;';
-        const emoTag = (p) => p.emo ? `<span class="day-emoji-badge" onclick="event.stopPropagation(); openPhotoEmojiEditor(${p.id})">${p.emo}</span>` : '';
-        if (n === 1) {
-            return `<div class="photo-fill" style="background-image:url('${photos[0].dataUrl}');${dimStyle(photos[0])}" onclick="openMemoView(${photos[0].id})"></div><div class="cal-photo-scrim"></div>${badge}${emoTag(photos[0])}`;
-        }
-        if (n <= 3) {
-            const strips = photos.map(p => `<div class="photo-strip" style="background-image:url('${p.dataUrl}');${dimStyle(p)}" onclick="openMemoView(${p.id})">${emoTag(p)}</div>`).join('');
-            return `<div class="photo-split">${strips}</div>${badge}`;
-        }
-        const shown = photos.slice(0, 4);
-        const extra = n - 4;
-        const quads = shown.map((p, i) => {
-            if (i === 3 && extra > 0) {
-                return `<div class="photo-quad" style="background-image:url('${p.dataUrl}');" onclick="showDateDetail('${dateStr}')"><div class="photo-more-overlay">+${extra}</div></div>`;
-            }
-            return `<div class="photo-quad" style="background-image:url('${p.dataUrl}');${dimStyle(p)}" onclick="openMemoView(${p.id})">${emoTag(p)}</div>`;
-        }).join('');
-        return `<div class="photo-grid4">${quads}</div>${badge}`;
+        const emoTag = cover.emo ? `<span class="day-emoji-badge" onclick="event.stopPropagation(); openPhotoEmojiEditor(${cover.id})">${cover.emo}</span>` : '';
+        const countTag = n > 1 ? `<span class="photo-count-badge">+${n - 1}</span>` : '';
+        const clickAction = n > 1 ? `openDayPhotosGallery('${dateStr}')` : `openMemoView(${cover.id})`;
+        return `<div class="photo-fill" style="background-image:url('${cover.dataUrl}');" onclick="${clickAction}"></div><div class="cal-photo-scrim"></div>${badge}${emoTag}${countTag}`;
     }
     // 사진(메모)별 이모지 빠른 편집
     let emojiEditingMemoId = null;
@@ -1048,12 +1060,14 @@
         if (m) { if (v) m.emoji = v; else delete m.emoji; }
         closeOverlay('dayEmojiOverlay');
         syncAll();
+        if (dayPhotosGalleryDate) renderDayPhotosGallery();
     }
     function clearDayEmoji() {
         const m = memoStore.find(x => x.id === emojiEditingMemoId);
         if (m) delete m.emoji;
         closeOverlay('dayEmojiOverlay');
         syncAll();
+        if (dayPhotosGalleryDate) renderDayPhotosGallery();
     }
     // ── 이모지 필터 (등록해둔 이모지를 카테고리처럼 써서 그 이모지 있는 사진만 도드라지게 보기) ──
     let photoCalEmojiFilter = null;
@@ -1080,6 +1094,31 @@
         closeOverlay('emojiFilterOverlay');
         renderPhotoCalendar();
     }
+    // ── 그 날짜에 사진이 여러 장일 때: 갤러리로 전부 보기 + 대표(커버) 사진 고르기 ──
+    let dayPhotosGalleryDate = null;
+    function openDayPhotosGallery(dateStr) {
+        dayPhotosGalleryDate = dateStr;
+        const photos = dayPhotos(dateStr);
+        document.getElementById('dayPhotosTitle').textContent = `${krLabel(dateStr)} · 사진 ${photos.length}장`;
+        renderDayPhotosGallery();
+        openOverlay('dayPhotosOverlay');
+    }
+    function renderDayPhotosGallery() {
+        const dateStr = dayPhotosGalleryDate;
+        const photos = dayPhotos(dateStr);
+        const cover = dayCoverPhoto(dateStr, photos);
+        document.getElementById('dayPhotosGrid').innerHTML = photos.map(p => `
+            <div class="gallery-thumb">
+                <img src="${p.dataUrl}" onclick="closeOverlay('dayPhotosOverlay'); openMemoView(${p.id})">
+                <span class="cover-badge ${cover && p.id === cover.id ? 'on' : ''}" onclick="event.stopPropagation(); setDayCoverPhoto('${dateStr}', ${p.id})">${cover && p.id === cover.id ? '⭐' : '☆'}</span>
+                ${p.emo ? `<span class="gallery-emoji" onclick="event.stopPropagation(); openPhotoEmojiEditor(${p.id})">${p.emo}</span>` : ''}
+            </div>`).join('');
+    }
+    function setDayCoverPhoto(dateStr, memoId) {
+        dayCoverMemo[dateStr] = memoId;
+        renderDayPhotosGallery();
+        syncAll();
+    }
     function renderPhotoCalendar() {
         document.getElementById('photoCalMonthLabel').textContent = `${photoCalYear}년 ${photoCalMonth+1}월`;
         const filterBtn = document.getElementById('photoCalFilterBtn');
@@ -1094,7 +1133,8 @@
         for (let i = 0; i < firstDay; i++) html += '<div></div>';
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${photoCalYear}-${String(photoCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-            const photos = dayPhotos(dateStr);
+            let photos = dayPhotos(dateStr);
+            if (photoCalEmojiFilter) photos = photos.filter(p => p.emo === photoCalEmojiFilter);
             html += `<div class="cal-cell" style="min-height:98px; padding:0; overflow:hidden;">${photoCellInner(dateStr, d, photos)}</div>`;
         }
         html += '</div>';
@@ -3307,7 +3347,7 @@
         memoStore.forEach(m => (m.photos || []).forEach(pid => usedIds.add(pid)));
         const photos = {};
         usedIds.forEach(pid => { if (photoCache[pid]) photos[pid] = photoCache[pid]; });
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, photos };
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, photos };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3332,6 +3372,7 @@
                 weekdayRoutines = Array.isArray(parsed.weekdayRoutines) ? parsed.weekdayRoutines : [];
                 memoStore = Array.isArray(parsed.memoStore) ? parsed.memoStore : [];
                 dayEmoji = (parsed.dayEmoji && typeof parsed.dayEmoji === 'object') ? parsed.dayEmoji : {};
+                dayCoverMemo = (parsed.dayCoverMemo && typeof parsed.dayCoverMemo === 'object') ? parsed.dayCoverMemo : {};
                 if (parsed.photos && typeof parsed.photos === 'object') {
                     Object.keys(parsed.photos).forEach(pid => { photoPut(pid, parsed.photos[pid]); });
                 }

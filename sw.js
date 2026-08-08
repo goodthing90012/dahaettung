@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dahaettung-v132';
+const CACHE_NAME = 'dahaettung-v134';
 
 const ASSETS = [
   './',
