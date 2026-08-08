@@ -118,7 +118,7 @@
         .day-emoji-badge { position: absolute; bottom: 3px; left: 4px; z-index: 2; font-size: 15px; line-height: 1; cursor: pointer; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
         .photo-fill { position: absolute; inset: 0; background-size: cover; background-position: center; cursor: pointer; }
         .photo-split { position: absolute; inset: 0; display: flex; gap: 1px; }
-        .photo-strip { flex: 1; height: 100%; background-size: cover; background-position: center; cursor: pointer; }
+        .photo-strip { position: relative; flex: 1; height: 100%; background-size: cover; background-position: center; cursor: pointer; }
         .photo-grid4 { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; }
         .photo-quad { position: relative; background-size: cover; background-position: center; cursor: pointer; }
         .photo-more-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; }
@@ -410,6 +410,7 @@
                 <button class="cal-nav-btn" onclick="changePhotoCalMonth(1)">›</button>
                 <button class="btn btn-primary btn-sm" style="flex:0 0 auto; width:auto; padding:7px 14px; white-space:nowrap;" onclick="addPhotoCalEntry()">+ 추가</button>
                 <button class="cal-nav-btn" style="font-size:18px; padding:2px 6px;" onclick="shareMonthAsImage()" title="이 달 전체 공유">📤</button>
+                <button class="cal-nav-btn" style="font-size:16px; padding:2px 6px;" id="photoCalFilterBtn" onclick="openEmojiFilterPicker()" title="이모지로 필터">🔎</button>
             </div>
             <div id="photoCalGrid"></div>
         </div>
@@ -582,7 +583,7 @@
                 <button type="button" id="memoPhotoTabLinkBtn" class="dow-chip" style="flex:0 0 auto; width:auto; padding:8px 12px;" onclick="toggleMemoPhotoTabLink()"></button>
             </div>
             <div id="memoDayEmojiWrap" style="display:none; margin-top:8px; align-items:center; gap:8px;">
-                <span style="font-size:11px; color:var(--gray); white-space:nowrap;">오늘 이모지</span>
+                <span style="font-size:11px; color:var(--gray); white-space:nowrap;">이 사진 이모지</span>
                 <input type="text" id="memoDayEmojiInput" placeholder="😆 (선택)" maxlength="20" style="flex:0 0 70px; text-align:center; font-size:20px; padding:6px;">
             </div>
         </div>
@@ -603,6 +604,18 @@
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="clearDayEmoji()">지우기</button>
             <button class="modal-btn yes" onclick="saveDayEmoji()">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 이모지 필터 (한컷 달력을 특정 이모지로만 골라보기) -->
+<div class="overlay" id="emojiFilterOverlay">
+    <div class="modal">
+        <h3>이모지로 보기</h3>
+        <p style="font-size:12px; color:var(--gray); margin:-4px 0 8px;">골라둔 이모지가 있는 날짜만 보여줘요</p>
+        <div id="emojiFilterChips" style="display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 4px;"></div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('emojiFilterOverlay')">닫기</button>
         </div>
     </div>
 </div>
@@ -978,7 +991,7 @@
         return memoStore
             .filter(m => m.date === dateStr && (m.origin === 'photocal' || m.crossLinked) && Array.isArray(m.photos) && m.photos.length && photoCache[m.photos[0]])
             .sort((a, b) => a.id - b.id)
-            .map(m => ({ id: m.id, dataUrl: photoCache[m.photos[0]] }));
+            .map(m => ({ id: m.id, dataUrl: photoCache[m.photos[0]], emo: m.emoji || null }));
     }
     // ── 포토 캘린더 (홈 달력과 별개 전용 탭) ──
     let photoCalYear = new Date().getFullYear(), photoCalMonth = new Date().getMonth();
@@ -995,20 +1008,20 @@
         renderMemoPhotoTabToggle();
     }
 
-    // 그 날짜 칸 안쪽 마크업: 사진 개수에 따라 1장 꽉채움 / 2~3장 분할 / 4장+ 2x2 그리드(+더보기)
+    // 그 날짜 칸 안쪽 마크업: 사진 개수에 따라 1장 꽉채움 / 2~3장 분할 / 4장+ 2x2 그리드(+더보기). 이모지는 사진(메모)마다 각자 것
     function photoCellInner(dateStr, d, photos) {
         const n = photos.length;
-        const emo = dayEmoji[dateStr];
-        // 좌하단 이모지 배지: 있을 때만 표시(탭하면 수정). 빈 칸엔 오클릭 방지 위해 아무 표시/탭 영역도 안 둠
-        const emojiBadge = emo ? `<span class="day-emoji-badge" onclick="event.stopPropagation(); openDayEmojiEditor('${dateStr}')">${emo}</span>` : '';
-        if (n === 0) return `<div class="plain-daynum">${d}</div>${emojiBadge}`;
+        if (n === 0) return `<div class="plain-daynum">${d}</div>`;
         const badge = `<span class="photo-daynum">${d}</span>`;
+        const matches = (p) => !photoCalEmojiFilter || p.emo === photoCalEmojiFilter;
+        const dimStyle = (p) => matches(p) ? '' : ' opacity:.18;';
+        const emoTag = (p) => p.emo ? `<span class="day-emoji-badge" onclick="event.stopPropagation(); openPhotoEmojiEditor(${p.id})">${p.emo}</span>` : '';
         if (n === 1) {
-            return `<div class="photo-fill" style="background-image:url('${photos[0].dataUrl}');" onclick="openMemoView(${photos[0].id})"></div><div class="cal-photo-scrim"></div>${badge}${emojiBadge}`;
+            return `<div class="photo-fill" style="background-image:url('${photos[0].dataUrl}');${dimStyle(photos[0])}" onclick="openMemoView(${photos[0].id})"></div><div class="cal-photo-scrim"></div>${badge}${emoTag(photos[0])}`;
         }
         if (n <= 3) {
-            const strips = photos.map(p => `<div class="photo-strip" style="background-image:url('${p.dataUrl}');" onclick="openMemoView(${p.id})"></div>`).join('');
-            return `<div class="photo-split">${strips}</div>${badge}${emojiBadge}`;
+            const strips = photos.map(p => `<div class="photo-strip" style="background-image:url('${p.dataUrl}');${dimStyle(p)}" onclick="openMemoView(${p.id})">${emoTag(p)}</div>`).join('');
+            return `<div class="photo-split">${strips}</div>${badge}`;
         }
         const shown = photos.slice(0, 4);
         const extra = n - 4;
@@ -1016,32 +1029,64 @@
             if (i === 3 && extra > 0) {
                 return `<div class="photo-quad" style="background-image:url('${p.dataUrl}');" onclick="showDateDetail('${dateStr}')"><div class="photo-more-overlay">+${extra}</div></div>`;
             }
-            return `<div class="photo-quad" style="background-image:url('${p.dataUrl}');" onclick="openMemoView(${p.id})"></div>`;
+            return `<div class="photo-quad" style="background-image:url('${p.dataUrl}');${dimStyle(p)}" onclick="openMemoView(${p.id})">${emoTag(p)}</div>`;
         }).join('');
-        return `<div class="photo-grid4">${quads}</div>${badge}${emojiBadge}`;
+        return `<div class="photo-grid4">${quads}</div>${badge}`;
     }
-    // 날짜별 이모지 편집
-    let dayEmojiEditingDate = null;
-    function openDayEmojiEditor(dateStr) {
-        dayEmojiEditingDate = dateStr;
-        document.getElementById('dayEmojiModalTitle').textContent = `${krLabel(dateStr)} · 이모지`;
-        document.getElementById('dayEmojiInput').value = dayEmoji[dateStr] || '';
+    // 사진(메모)별 이모지 빠른 편집
+    let emojiEditingMemoId = null;
+    function openPhotoEmojiEditor(memoId) {
+        emojiEditingMemoId = memoId;
+        const m = memoStore.find(x => x.id === memoId);
+        document.getElementById('dayEmojiModalTitle').textContent = '이 사진 이모지';
+        document.getElementById('dayEmojiInput').value = (m && m.emoji) || '';
         openOverlay('dayEmojiOverlay');
     }
     function saveDayEmoji() {
         const v = document.getElementById('dayEmojiInput').value.trim();
-        if (!dayEmojiEditingDate) return;
-        if (v) dayEmoji[dayEmojiEditingDate] = v; else delete dayEmoji[dayEmojiEditingDate];
+        const m = memoStore.find(x => x.id === emojiEditingMemoId);
+        if (m) { if (v) m.emoji = v; else delete m.emoji; }
         closeOverlay('dayEmojiOverlay');
         syncAll();
     }
     function clearDayEmoji() {
-        if (dayEmojiEditingDate) delete dayEmoji[dayEmojiEditingDate];
+        const m = memoStore.find(x => x.id === emojiEditingMemoId);
+        if (m) delete m.emoji;
         closeOverlay('dayEmojiOverlay');
         syncAll();
     }
+    // ── 이모지 필터 (등록해둔 이모지를 카테고리처럼 써서 그 이모지 있는 사진만 도드라지게 보기) ──
+    let photoCalEmojiFilter = null;
+    function distinctEmojis() {
+        const seen = {}; const out = [];
+        memoStore.forEach(m => { if (m.emoji && !seen[m.emoji]) { seen[m.emoji] = true; out.push(m.emoji); } });
+        return out;
+    }
+    function openEmojiFilterPicker() {
+        const list = distinctEmojis();
+        const chipsEl = document.getElementById('emojiFilterChips');
+        const chip = (label, active, onclick) => `<button type="button" class="dow-chip ${active?'on':''}" style="flex:0 0 auto; padding:8px 14px; font-size:18px;" onclick="${onclick}">${label}</button>`;
+        if (list.length === 0) {
+            chipsEl.innerHTML = '<div class="empty" style="padding:6px 0;">아직 등록된 이모지가 없어요</div>';
+        } else {
+            let html = chip('전체', !photoCalEmojiFilter, 'selectEmojiFilter(null)');
+            list.forEach(e => { html += chip(e, photoCalEmojiFilter === e, `selectEmojiFilter(${jsStrLit(e)})`); });
+            chipsEl.innerHTML = html;
+        }
+        openOverlay('emojiFilterOverlay');
+    }
+    function selectEmojiFilter(emo) {
+        photoCalEmojiFilter = emo;
+        closeOverlay('emojiFilterOverlay');
+        renderPhotoCalendar();
+    }
     function renderPhotoCalendar() {
         document.getElementById('photoCalMonthLabel').textContent = `${photoCalYear}년 ${photoCalMonth+1}월`;
+        const filterBtn = document.getElementById('photoCalFilterBtn');
+        if (filterBtn) {
+            filterBtn.textContent = photoCalEmojiFilter || '🔎';
+            filterBtn.style.background = photoCalEmojiFilter ? 'var(--primary-tint)' : '';
+        }
         const firstDay = new Date(photoCalYear, photoCalMonth, 1).getDay();
         const daysInMonth = new Date(photoCalYear, photoCalMonth+1, 0).getDate();
         let html = '<div class="cal-grid">';
@@ -1092,7 +1137,7 @@
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
             const photos = dayPhotos(dateStr);
-            days.push({ d, emo: dayEmoji[dateStr] || null, photoUrl: photos[0] ? photos[0].dataUrl : null });
+            days.push({ d, emo: photos[0] ? photos[0].emo : null, photoUrl: photos[0] ? photos[0].dataUrl : null });
         }
         const [loaded, logoImg] = await Promise.all([
             Promise.all(days.map(async c => ({ ...c, img: c.photoUrl ? await loadImageEl(c.photoUrl) : null }))),
@@ -2889,14 +2934,11 @@
         btn.textContent = memoWorkingCrossLinked ? `🔗 ${targetLabel}에도 연동됨 · 탭하면 해제` : `🔗 ${targetLabel}에도 표시하기`;
         renderMemoDayEmojiField();
     }
-    // 한컷 기원(origin='photocal') 메모일 때만 "오늘 이모지" 입력칸 표시, 그 날짜에 이미 저장된 값으로 미리 채움
+    // 한컷 기원(origin='photocal') 메모일 때만 "이 사진 이모지" 입력칸 표시. 값은 이 메모 것이라 날짜 바뀌어도 안 건드림
     function renderMemoDayEmojiField() {
         const wrap = document.getElementById('memoDayEmojiWrap');
         if (!wrap) return;
         wrap.style.display = memoWorkingOrigin === 'photocal' ? 'flex' : 'none';
-        if (memoWorkingOrigin === 'photocal') {
-            document.getElementById('memoDayEmojiInput').value = dayEmoji[memoPickedDate] || '';
-        }
     }
     async function addMemoPhotos(files) {
         if (!files || !files.length) return;
@@ -3128,6 +3170,7 @@
         memoCalYear = mb.getFullYear(); memoCalMonth = mb.getMonth();
         renderMemoCal();
         document.getElementById('memoText').value = m ? m.text : '';
+        document.getElementById('memoDayEmojiInput').value = (m && m.emoji) || '';
         memoWorkingPhotos = m && Array.isArray(m.photos) ? m.photos.slice() : [];
         renderMemoPhotos();
         const linkInfo = m ? m.link : pendingMemoLink;
@@ -3139,15 +3182,14 @@
         const date = memoPickedDate || getTodayStr();
         if (!text && !memoWorkingPhotos.length) { showToast('메모 내용을 입력하거나, 사진을 추가해 주세요'); return; }
         const linked = memoWorkingPhotos.length ? memoWorkingCrossLinked : false; // 사진 없으면 연동 의미 없음
-        if (memoWorkingOrigin === 'photocal') {
-            const emo = document.getElementById('memoDayEmojiInput').value.trim();
-            if (emo) dayEmoji[date] = emo; else delete dayEmoji[date];
-        }
+        const emoji = (memoWorkingOrigin === 'photocal') ? document.getElementById('memoDayEmojiInput').value.trim() : '';
         if (editingMemoId) {
             const m = memoStore.find(x => x.id === editingMemoId);
-            if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); m.crossLinked = linked; }
+            if (m) { m.text = text; m.date = date; m.photos = memoWorkingPhotos.slice(); m.crossLinked = linked; if (emoji) m.emoji = emoji; else delete m.emoji; }
         } else {
-            memoStore.push({ id: Date.now(), text, date, photos: memoWorkingPhotos.slice(), link: pendingMemoLink, origin: memoWorkingOrigin, crossLinked: linked });
+            const m = { id: Date.now(), text, date, photos: memoWorkingPhotos.slice(), link: pendingMemoLink, origin: memoWorkingOrigin, crossLinked: linked };
+            if (emoji) m.emoji = emoji;
+            memoStore.push(m);
         }
         memoWorkingPhotos = [];
         editingMemoId = null; pendingMemoLink = null;
@@ -3294,6 +3336,7 @@
                     Object.keys(parsed.photos).forEach(pid => { photoPut(pid, parsed.photos[pid]); });
                 }
                 normalizeWeekdayRoutines();
+                migrateDayEmojiToPhotos();
                 syncAll();
                 showToast('✅ 백업 데이터를 불러왔어요');
             } catch (err) {
@@ -3346,11 +3389,21 @@
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     // 문자열을 작은따옴표 JS 리터럴로 안전하게 (onclick="..." 속성 안에 넣을 때 사용 — 큰따옴표 충돌 방지)
     function jsStrLit(s) { return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; }
+    // 예전 방식(날짜별 이모지 하나)에서 새 방식(사진마다 각자 이모지)으로 1회 이전 — 그 날짜의 아직 이모지 없는 첫 사진에 넣어줌
+    function migrateDayEmojiToPhotos() {
+        Object.keys(dayEmoji).forEach(dateStr => {
+            const emo = dayEmoji[dateStr];
+            if (!emo) return;
+            const m = memoStore.find(x => x.date === dateStr && (x.origin === 'photocal' || x.crossLinked) && Array.isArray(x.photos) && x.photos.length && !x.emoji);
+            if (m) m.emoji = emo;
+        });
+    }
 
     // ══════════ 초기화 ══════════
     window.onload = async () => {
         await photoLoadAll();
         migrateMemosToStore();
+        migrateDayEmojiToPhotos();
         renderHome();
         renderCheckTab();
         renderRoutineMng();
