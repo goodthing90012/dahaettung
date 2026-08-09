@@ -3440,6 +3440,33 @@
         });
     }
 
+    // 다른 앱에서 "다했텅"으로 공유해서 들어온 사진이 있으면 받아서 한컷 추가 화면으로 열어줌
+    async function checkPendingShare() {
+        if (!location.search.includes('shared=1')) return;
+        history.replaceState({}, '', location.pathname + location.hash); // 새로고침해도 다시 안 뜨게 URL 정리
+        try {
+            const db = await new Promise((resolve, reject) => {
+                const req = indexedDB.open('dahaettung-share-tmp', 1);
+                req.onupgradeneeded = () => { req.result.createObjectStore('pending', { autoIncrement: true }); };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+            const items = await new Promise((resolve, reject) => {
+                const tx = db.transaction('pending', 'readwrite');
+                const store = tx.objectStore('pending');
+                const getReq = store.getAll();
+                getReq.onsuccess = () => { store.clear(); resolve(getReq.result || []); };
+                getReq.onerror = () => reject(getReq.error);
+            });
+            db.close();
+            if (!items.length) return;
+            switchTab('photocal');
+            addPhotoCalEntry(); // 한컷 "+ 추가"와 동일한 화면(origin=photocal)을 미리 열어둠
+            await addMemoPhotos(items.map(it => it.blob));
+            showToast(`📤 공유된 사진 ${items.length}장을 불러왔어요`);
+        } catch (e) { /* 공유 데이터가 없거나 처리 실패해도 앱은 정상적으로 열림 */ }
+    }
+
     // ══════════ 초기화 ══════════
     window.onload = async () => {
         await photoLoadAll();
@@ -3452,6 +3479,7 @@
         renderWeekdayMng();
         renderProjectMng();
         updateLastSavedLabel();
+        checkPendingShare();
     };
 
     if ('serviceWorker' in navigator) {

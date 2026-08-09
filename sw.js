@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dahaettung-v134';
+const CACHE_NAME = 'dahaettung-v136';
 
 const ASSETS = [
   './',
@@ -35,8 +35,46 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// ── 공유 대상(Share Target): 다른 앱에서 "다했텅"으로 사진을 공유했을 때 받는 곳 ──
+// GitHub Pages는 정적 호스팅이라 서버 코드가 없어서, 서비스워커가 POST를 직접 가로채 처리한다.
+const SHARE_DB_NAME = 'dahaettung-share-tmp';
+function openShareDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SHARE_DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('pending', { autoIncrement: true }); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function storePendingShareFiles(files) {
+  const db = await openShareDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('pending', 'readwrite');
+    const store = tx.objectStore('pending');
+    files.forEach((f) => store.add({ blob: f, name: f.name || '', type: f.type || '', sharedAt: Date.now() }));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
 // 요청 가로채기: HTML은 항상 최신 우선, 정적 파일은 캐시 우선
 self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+
+  // 다른 앱의 공유 시트에서 "다했텅"을 선택했을 때 오는 요청
+  if (e.request.method === 'POST' && url.pathname.endsWith('/share-target')) {
+    e.respondWith((async () => {
+      try {
+        const formData = await e.request.formData();
+        const files = formData.getAll('photos').filter((f) => f && typeof f === 'object' && f.size > 0);
+        if (files.length) await storePendingShareFiles(files);
+      } catch (err) { /* 실패해도 앱은 정상적으로 열리게 그냥 진행 */ }
+      return Response.redirect('./?shared=1', 303);
+    })());
+    return;
+  }
+
   if (e.request.method !== 'GET') return; // POST 등은 그냥 통과
 
   const isHTML =
