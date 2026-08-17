@@ -406,6 +406,7 @@
             </div>
             <button class="btn btn-primary btn-sm" style="width:100%;" onclick="openMemoEditor(null)">+ 새 메모 작성</button>
             <input type="text" id="memoSearch" placeholder="🔍 메모 검색" oninput="renderMemoTab()" style="margin-top:8px;">
+            <div id="memoKindChips" style="display:flex; gap:5px; margin-top:6px;"></div>
             <div id="memoList" style="margin-top:10px;"></div>
         </div>
     </div>
@@ -587,17 +588,10 @@
                 <input type="text" id="progressTitleInput" placeholder="예) 어린 왕자" oninput="onProgressTitleInput()">
                 <div id="progressTitleChips" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:6px;"></div>
                 <div id="progressPrevHint" style="display:none; font-size:11px; color:var(--primary-dark); margin-top:8px; background:var(--primary-tint); padding:6px 8px; border-radius:7px; line-height:1.5;"></div>
-                <div style="display:flex; gap:8px; margin-top:10px;">
-                    <div style="flex:0 0 56px;">
-                        <label class="fld">아이콘</label>
-                        <input type="text" id="progressEmojiInput" maxlength="2" placeholder="📊" style="text-align:center; padding:8px 4px;" oninput="updateProgressPreview()">
-                    </div>
-                    <div style="flex:1;">
-                        <label class="fld">단위</label>
-                        <input type="text" id="progressUnitInput" placeholder="페이지" oninput="renderProgressUnitChips(); updateProgressPreview();">
-                    </div>
+                <div style="margin-top:10px; width:56px;">
+                    <label class="fld">아이콘</label>
+                    <input type="text" id="progressEmojiInput" maxlength="2" placeholder="📊" style="text-align:center; padding:8px 4px;" oninput="updateProgressPreview()">
                 </div>
-                <div id="progressUnitChips" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:6px;"></div>
                 <div style="display:flex; gap:8px; margin-top:10px;">
                     <div style="flex:1;">
                         <label class="fld">목표값</label>
@@ -2950,7 +2944,6 @@
         return list.find(x => x.id === taskId) || null;
     }
     // ══════════ 진행 기록 (메모의 선택적 확장 기능 — 책/강의/게임 등 범용 진행률 추적) ══════════
-    const PROGRESS_UNITS = ['페이지', '회차', '횟수', '%', '숫자'];
     function formatProgressNum(n) {
         return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
     }
@@ -2959,7 +2952,7 @@
         const pct = p.target > 0 ? Math.max(0, Math.min(100, Math.round((p.current / p.target) * 100))) : 0;
         return `<div class="progress-block">
             <div class="progress-title">${escapeHtml(p.emoji || '📊')} ${escapeHtml(p.title)}${deltaText ? ` <span class="progress-delta">${escapeHtml(deltaText)}</span>` : ''}</div>
-            <div class="progress-nums">${formatProgressNum(p.current)} / ${formatProgressNum(p.target)} ${escapeHtml(p.unit)}<span class="progress-pct">${pct}%</span></div>
+            <div class="progress-nums">${formatProgressNum(p.current)} / ${formatProgressNum(p.target)}<span class="progress-pct">${pct}%</span></div>
             <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%;"></div></div>
         </div>`;
     }
@@ -3004,7 +2997,6 @@
         document.getElementById('memoProgressForm').style.display = open ? 'block' : 'none';
         if (open) {
             renderProgressTitleChips();
-            renderProgressUnitChips();
             updateProgressPreview();
             document.getElementById('memoProgressToggleBtn').textContent = '▲ 진행 기록 접기';
         } else {
@@ -3021,7 +3013,7 @@
         const p = readProgressForm();
         if (p) {
             const pct = p.target > 0 ? Math.max(0, Math.min(100, Math.round((p.current / p.target) * 100))) : 0;
-            btn.textContent = `${p.emoji || '📊'} ${p.title} · ${formatProgressNum(p.current)}/${formatProgressNum(p.target)}${p.unit} (${pct}%) · 펼치기`;
+            btn.textContent = `${p.emoji || '📊'} ${p.title} · ${formatProgressNum(p.current)}/${formatProgressNum(p.target)} (${pct}%) · 펼치기`;
         } else {
             btn.textContent = '＋ 진행 기록 추가';
         }
@@ -3029,7 +3021,6 @@
     function clearProgressForm() {
         document.getElementById('progressTitleInput').value = '';
         document.getElementById('progressEmojiInput').value = '';
-        document.getElementById('progressUnitInput').value = '';
         document.getElementById('progressTargetInput').value = '';
         document.getElementById('progressCurrentInput').value = '';
         document.getElementById('progressPrevHint').style.display = 'none';
@@ -3041,7 +3032,6 @@
         const p = has ? m.progress : null;
         document.getElementById('progressTitleInput').value = p ? p.title : '';
         document.getElementById('progressEmojiInput').value = p ? (p.emoji || '') : '';
-        document.getElementById('progressUnitInput').value = p ? (p.unit || '') : '';
         document.getElementById('progressTargetInput').value = p ? p.target : '';
         document.getElementById('progressCurrentInput').value = p ? p.current : '';
         document.getElementById('progressPrevHint').style.display = 'none';
@@ -3055,19 +3045,7 @@
             `<button type="button" class="dow-chip ${p.title === current ? 'on' : ''}" style="flex:0 0 auto; padding:6px 10px;" onclick="pickProgressTitle(${jsStrLit(p.title)})">${escapeHtml(p.emoji || '📊')} ${escapeHtml(p.title)}</button>`
         ).join('');
     }
-    function renderProgressUnitChips() {
-        const el = document.getElementById('progressUnitChips'); if (!el) return;
-        const current = document.getElementById('progressUnitInput').value.trim();
-        el.innerHTML = PROGRESS_UNITS.map(u =>
-            `<button type="button" class="dow-chip ${current === u ? 'on' : ''}" style="flex:0 0 auto; padding:6px 10px;" onclick="setProgressUnit(${jsStrLit(u)})">${u}</button>`
-        ).join('');
-    }
-    function setProgressUnit(u) {
-        document.getElementById('progressUnitInput').value = u;
-        renderProgressUnitChips();
-        updateProgressPreview();
-    }
-    // 제목을 입력/선택했을 때: 기존에 같은 제목의 기록이 있으면 이모지·단위·목표값·현재값을 자동으로 이어받음("이어쓰기")
+    // 제목을 입력/선택했을 때: 기존에 같은 제목의 기록이 있으면 이모지·목표값·현재값을 자동으로 이어받음("이어쓰기")
     function onProgressTitleInput() {
         renderProgressTitleChips();
         const title = document.getElementById('progressTitleInput').value.trim();
@@ -3075,12 +3053,10 @@
         const hintEl = document.getElementById('progressPrevHint');
         if (latest) {
             document.getElementById('progressEmojiInput').value = latest.emoji || '';
-            document.getElementById('progressUnitInput').value = latest.unit || '';
             document.getElementById('progressTargetInput').value = latest.target;
             document.getElementById('progressCurrentInput').value = latest.current;
             hintEl.style.display = '';
-            hintEl.textContent = `📌 이전 기록: ${formatProgressNum(latest.current)} / ${formatProgressNum(latest.target)} ${latest.unit} · 오늘 진행한 만큼 늘려서 현재값을 적어주세요`;
-            renderProgressUnitChips();
+            hintEl.textContent = `📌 이전 기록: ${formatProgressNum(latest.current)} / ${formatProgressNum(latest.target)} · 오늘 진행한 만큼 늘려서 현재값을 적어주세요`;
         } else {
             hintEl.style.display = 'none';
         }
@@ -3093,12 +3069,11 @@
     // 폼 값을 읽어 유효하면 진행 기록 객체로, 아니면(필수값 미입력) null
     function readProgressForm() {
         const title = document.getElementById('progressTitleInput').value.trim();
-        const unit = document.getElementById('progressUnitInput').value.trim();
         const target = parseFloat(document.getElementById('progressTargetInput').value);
         const current = parseFloat(document.getElementById('progressCurrentInput').value);
         const emoji = document.getElementById('progressEmojiInput').value.trim();
-        if (!title || !unit || !isFinite(target) || !isFinite(current) || target <= 0) return null;
-        return { title, unit, target, current, emoji: emoji || '' };
+        if (!title || !isFinite(target) || !isFinite(current) || target <= 0) return null;
+        return { title, target, current, emoji: emoji || '' };
     }
     function updateProgressPreview() {
         const el = document.getElementById('progressPreview'); if (!el) return;
@@ -3422,9 +3397,9 @@
         const date = memoPickedDate || getTodayStr();
         // 폼이 접혀 있어도(접기≠지우기) 입력된 값은 그대로 저장 대상 — 화면에 보이는지가 아니라 값이 있는지로 판단
         const progress = readProgressForm();
-        const progressFieldIds = ['progressTitleInput', 'progressUnitInput', 'progressTargetInput', 'progressCurrentInput', 'progressEmojiInput'];
+        const progressFieldIds = ['progressTitleInput', 'progressTargetInput', 'progressCurrentInput', 'progressEmojiInput'];
         const anyProgressFieldFilled = progressFieldIds.some(id => document.getElementById(id).value.trim() !== '');
-        if (!progress && anyProgressFieldFilled) { showToast('진행 기록의 제목·단위·목표값·현재값을 모두 입력해 주세요'); return; }
+        if (!progress && anyProgressFieldFilled) { showToast('진행 기록의 제목·목표값·현재값을 모두 입력해 주세요'); return; }
         if (!text && !memoWorkingPhotos.length && !progress) { showToast('메모 내용을 입력하거나, 사진을 추가하거나, 진행 기록을 입력해 주세요'); return; }
         const linked = memoWorkingPhotos.length ? memoWorkingCrossLinked : false; // 사진 없으면 연동 의미 없음
         const emoji = (memoWorkingOrigin === 'photocal') ? document.getElementById('memoDayEmojiInput').value.trim() : '';
@@ -3520,16 +3495,32 @@
         if (document.getElementById('memoViewOverlay').classList.contains('active')) openMemoView(m.id);
         showToast('연결을 해제했어요');
     }
+    let memoKindFilter = 'all'; // 'all' | 'normal' | 'progress'
+    function renderMemoKindChips() {
+        const el = document.getElementById('memoKindChips'); if (!el) return;
+        const opts = [{ key: 'all', label: '전체' }, { key: 'normal', label: '일반 메모' }, { key: 'progress', label: '진행 기록' }];
+        el.innerHTML = opts.map(o =>
+            `<button type="button" class="dow-chip ${memoKindFilter === o.key ? 'on' : ''}" style="flex:0 0 auto; padding:6px 10px;" onclick="setMemoKindFilter('${o.key}')">${o.label}</button>`
+        ).join('');
+    }
+    function setMemoKindFilter(key) {
+        memoKindFilter = key;
+        renderMemoTab();
+    }
     function renderMemoTab() {
+        renderMemoKindChips();
         const visible = memoStore.filter(m => m.origin !== 'photocal' || m.crossLinked);
         document.getElementById('memoTotalCount').textContent = `(${visible.length})`;
         const el = document.getElementById('memoList');
         if (visible.length === 0) { el.innerHTML = '<div class="empty">작성된 메모가 없어요</div>'; return; }
         const q = (document.getElementById('memoSearch')?.value || '').trim().toLowerCase();
-        const list = visible.filter(m => !q || m.text.toLowerCase().includes(q) || memoLinkLabel(m).toLowerCase().includes(q) || (m.progress && m.progress.title.toLowerCase().includes(q)))
+        const list = visible
+            .filter(m => memoKindFilter === 'all' || (memoKindFilter === 'progress' ? !!m.progress : !m.progress))
+            .filter(m => !q || m.text.toLowerCase().includes(q) || memoLinkLabel(m).toLowerCase().includes(q) || (m.progress && m.progress.title.toLowerCase().includes(q)))
             .slice().sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')) || b.id - a.id);
         if (list.length === 0) { el.innerHTML = '<div class="empty">검색 결과가 없어요</div>'; return; }
-        el.innerHTML = `<div style="font-size:11px; color:var(--gray); margin-bottom:6px;">${q ? `검색 ${list.length}개` : `전체 ${list.length}개`}</div>` +
+        const kindLabel = memoKindFilter === 'progress' ? '진행 기록' : (memoKindFilter === 'normal' ? '일반 메모' : '전체');
+        el.innerHTML = `<div style="font-size:11px; color:var(--gray); margin-bottom:6px;">${q ? `검색 ${list.length}개` : `${kindLabel} ${list.length}개`}</div>` +
             list.map(m => `
             <div class="memo-card">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
