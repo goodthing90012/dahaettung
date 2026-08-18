@@ -1730,16 +1730,25 @@
     // 특정 날짜의 할 일만 (루틴 제외) + 완료 여부
     function collectDayTasks(dateStr) {
         const items = [];
-        projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done, memos: t.memos || [] }); }));
-        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done, memos: t.memos || [] }); });
+        projects.forEach(p => (p.tasks || []).forEach(t => { if (t.date === dateStr) items.push({ name: `[${p.name}] ${t.name}`, done: t.done, memos: memosForTask(p.id, t.id) }); }));
+        standaloneTasks.forEach(t => { if (t.date === dateStr) items.push({ name: t.name, done: t.done, memos: memosForTask(null, t.id) }); });
         return items;
+    }
+    // 메모 내용이 비었을 때(진행 기록만/사진만 있는 메모) 브리핑에 보여줄 한 줄 요약
+    function memoBriefSummary(m) {
+        if (m.text) return m.text;
+        if (m.progress) return `${m.progress.emoji || '📊'} ${m.progress.title} ${formatProgressNum(m.progress.current)}/${formatProgressNum(m.progress.target)}`;
+        if (m.photos && m.photos.length) return '📷 사진';
+        return '';
     }
     function briefRows(items, dateStr) {
         return items.map(d => {
             const memoHtml = (d.memos && d.memos.length)
-                ? `<div style="padding-left:24px; margin:-2px 0 4px;">` + d.memos.map(m =>
-                    `<div style="font-size:12px; color:#888; white-space:pre-wrap; word-break:break-word; padding:2px 0;">📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(m.text)}</div>`
-                  ).join('') + `</div>`
+                ? `<div style="padding-left:24px; margin:-2px 0 4px;">` + d.memos.map(m => {
+                    const body = memoBriefSummary(m);
+                    if (!body) return '';
+                    return `<div style="font-size:12px; color:#888; white-space:pre-wrap; word-break:break-word; padding:2px 0; cursor:pointer;" onclick="event.stopPropagation(); closeOverlay('briefingOverlay'); openMemoView(${m.id});">📝 ${m.date ? m.date + ' · ' : ''}${escapeHtml(body)}</div>`;
+                  }).join('') + `</div>`
                 : '';
             return `<div class="brief-row" onclick="goToCheckDate('${dateStr}')"><span>${d.done ? '✅' : '⬜'}</span><span style="flex:1; ${d.done ? 'color:#aaa; text-decoration:line-through;' : ''}">${escapeHtml(d.name)}</span></div>${memoHtml}`;
         }).join('');
@@ -1858,7 +1867,8 @@
         const line = d => {
             let out = `- ${d.done ? '✅' : '⬜'} ${d.name}`;
             if (d.memos && d.memos.length) {
-                out += '\n' + d.memos.map(m => `    · ${m.text.replace(/\n/g, ' ')}`).join('\n');
+                const memoLines = d.memos.map(m => memoBriefSummary(m)).filter(Boolean).map(t => `    · ${t.replace(/\n/g, ' ')}`);
+                if (memoLines.length) out += '\n' + memoLines.join('\n');
             }
             return out;
         };
