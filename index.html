@@ -295,7 +295,7 @@
     <div id="tab-check" class="content">
         <div class="date-nav">
             <button onclick="changeCheckDate(-1)">‹</button>
-            <div class="lbl" id="checkDateLabel"></div>
+            <div class="lbl" id="checkDateLabel" onclick="openCheckDatePicker()" style="cursor:pointer; text-decoration:underline dotted;"></div>
             <button onclick="changeCheckDate(1)" id="checkDateNext">›</button>
             <button class="today-btn" id="checkTodayBtn" onclick="goCheckToday()">오늘</button>
         </div>
@@ -652,6 +652,22 @@
         <div id="emojiFilterChips" style="display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 4px;"></div>
         <div class="modal-btn-row">
             <button class="modal-btn no" onclick="closeOverlay('emojiFilterOverlay')">닫기</button>
+        </div>
+    </div>
+</div>
+
+<!-- 체크 탭 날짜를 달력에서 바로 골라 이동 -->
+<div class="overlay" id="checkDatePickerOverlay">
+    <div class="modal">
+        <h3>날짜로 이동</h3>
+        <div class="cal-head" style="margin-bottom:6px;">
+            <button class="cal-nav-btn" onclick="changeCheckCalMonth(-1)">‹</button>
+            <div class="cal-month" id="checkCalMonthLabel"></div>
+            <button class="cal-nav-btn" onclick="changeCheckCalMonth(1)">›</button>
+        </div>
+        <div id="checkCalGrid"></div>
+        <div class="modal-btn-row">
+            <button class="modal-btn no" onclick="closeOverlay('checkDatePickerOverlay')">닫기</button>
         </div>
     </div>
 </div>
@@ -1910,6 +1926,43 @@
         renderCheckTab();
     }
     function isCheckable(dateStr) { return dateStr <= getTodayStr(); }
+    // ── 체크 탭: 날짜 라벨을 탭하면 달력에서 바로 원하는 날짜로 이동 ──
+    let checkCalYear = 0, checkCalMonth = 0;
+    function openCheckDatePicker() {
+        const d = new Date(parseDate(checkDateStr));
+        checkCalYear = d.getFullYear(); checkCalMonth = d.getMonth();
+        renderCheckDatePicker();
+        openOverlay('checkDatePickerOverlay');
+    }
+    function changeCheckCalMonth(dir) {
+        checkCalMonth += dir;
+        if (checkCalMonth < 0) { checkCalMonth = 11; checkCalYear--; }
+        if (checkCalMonth > 11) { checkCalMonth = 0; checkCalYear++; }
+        renderCheckDatePicker();
+    }
+    function renderCheckDatePicker() {
+        document.getElementById('checkCalMonthLabel').textContent = `${checkCalYear}년 ${checkCalMonth + 1}월`;
+        const firstDay = new Date(checkCalYear, checkCalMonth, 1).getDay();
+        const daysInMonth = new Date(checkCalYear, checkCalMonth + 1, 0).getDate();
+        const todayStr = getTodayStr();
+        let html = '<div class="cal-grid">';
+        ['일','월','화','수','목','금','토'].forEach(d => html += `<div class="cal-dow">${d}</div>`);
+        for (let i = 0; i < firstDay; i++) html += '<div></div>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${checkCalYear}-${String(checkCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const cls = ['exc-cell'];
+            if (dateStr === checkDateStr) cls.push('picked');
+            if (dateStr === todayStr) cls.push('today');
+            html += `<div class="${cls.join(' ')}" onclick="pickCheckDate('${dateStr}')">${d}</div>`;
+        }
+        html += '</div>';
+        document.getElementById('checkCalGrid').innerHTML = html;
+    }
+    function pickCheckDate(dateStr) {
+        checkDateStr = dateStr;
+        closeOverlay('checkDatePickerOverlay');
+        renderCheckTab();
+    }
 
     function taskRow(projLabel, projId, t) {
         const pid = projId === null ? 'null' : projId;
