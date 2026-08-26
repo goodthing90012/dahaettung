@@ -2680,6 +2680,8 @@
         if (!name) { showToast('이름을 입력해 주세요'); return; }
         if (!start) { showToast('기간을 선택해 주세요'); return; }
         if (start > end) { const t = start; start = end; end = t; }
+        const isNew = !editingProjectId;
+        let newProjectId = null;
         if (editingProjectId) {
             const p = projects.find(x => x.id === editingProjectId);
             Object.assign(p, { name, emoji, color: pickedColor, startDate: start, endDate: end });
@@ -2690,11 +2692,18 @@
                 showToast(`기간 밖 할 일 ${out.length}개를 기간 안으로 옮겼어요`);
             }
         } else {
-            projects.push({ id: Date.now(), name, emoji, color: pickedColor, startDate: start, endDate: end, memos: [], tasks: [] });
+            newProjectId = Date.now();
+            projects.push({ id: newProjectId, name, emoji, color: pickedColor, startDate: start, endDate: end, memos: [], tasks: [] });
         }
         closeOverlay('projectOverlay');
         syncAll();
-        showToast('✅ 저장됐어요');
+        if (isNew) {
+            // 새 프로젝트를 막 만들었으면 바로 이어서 기본 할 일을 추가할 수 있게(전체 기간/선택 날짜 일괄 적용은 할 일 추가 화면에서 그대로 지원)
+            showToast('✅ 프로젝트가 생성됐어요 · 기본 할 일을 추가해 보세요');
+            openTaskModal(newProjectId);
+        } else {
+            showToast('✅ 저장됐어요');
+        }
     }
     function deleteProject(id) {
         const p = projects.find(x => x.id === id); if (!p) return;
@@ -2881,8 +2890,10 @@
         document.getElementById('taskDateHint').textContent = p
             ? `날짜 (프로젝트 기간 ${p.startDate} ~ ${p.endDate} 안에서 선택)`
             : '날짜 (여러 날 선택 가능)';
-        taskPickedDates = [checkDateStr];
-        const base = new Date(parseDate(checkDateStr));
+        // 체크 탭에서 보던 날짜가 이 프로젝트 기간 밖이면(방금 만든 프로젝트 등) 시작일을 기본값으로
+        const baseDate = (p && (checkDateStr < p.startDate || checkDateStr > p.endDate)) ? p.startDate : checkDateStr;
+        taskPickedDates = [baseDate];
+        const base = new Date(parseDate(baseDate));
         taskCalYear = base.getFullYear(); taskCalMonth = base.getMonth();
         renderTaskCal();
         openOverlay('taskOverlay');
