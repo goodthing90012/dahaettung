@@ -317,6 +317,7 @@
 
         <div class="card">
             <div class="section-title">📝 이 날 할 일</div>
+            <button class="mini-add" onclick="openProjectModal(checkDateStr)">+ 새 프로젝트 추가</button>
             <div id="dayTaskList"></div>
         </div>
     </div>
@@ -2596,12 +2597,13 @@
     }
     function pickColor(c) { pickedColor = c; renderColorPicker(); }
     let projPickStart = null, projPickEnd = null, projCalYear = 0, projCalMonth = 0;
-    function openProjectModal() {
+    function openProjectModal(startDateOverride) {
         editingProjectId = null; pickedColor = PROJECT_COLORS[0];
         document.getElementById('projectModalTitle').textContent = '새 프로젝트 / 일정';
         document.getElementById('projEmoji').value = '';
         document.getElementById('projName').value = '';
-        projPickStart = getTodayStr(); projPickEnd = getTodayStr();
+        const start = startDateOverride || getTodayStr();
+        projPickStart = start; projPickEnd = start;
         initProjCal(projPickStart);
         renderColorPicker();
         openOverlay('projectOverlay');
