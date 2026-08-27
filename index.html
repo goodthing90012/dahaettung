@@ -2700,7 +2700,7 @@
         if (isNew) {
             // 새 프로젝트를 막 만들었으면 바로 이어서 기본 할 일을 추가할 수 있게(전체 기간/선택 날짜 일괄 적용은 할 일 추가 화면에서 그대로 지원)
             showToast('✅ 프로젝트가 생성됐어요 · 기본 할 일을 추가해 보세요');
-            openTaskModal(newProjectId);
+            openTaskModal(newProjectId, true);
         } else {
             showToast('✅ 저장됐어요');
         }
@@ -2879,12 +2879,15 @@
         return p.tasks;
     }
     let taskCalYear = 0, taskCalMonth = 0, taskPickedDates = [];
-    function openTaskModal(projectId) {
+    let taskModalOptional = false; // true면 내용 없이 "추가"를 눌러도 에러 없이 그냥 닫힘(프로젝트 생성 직후 등)
+    function openTaskModal(projectId, optional) {
         taskProjectId = projectId; // null = 단독
+        taskModalOptional = !!optional;
         editingTask = null;
         const p = (projectId === null) ? null : projects.find(x => x.id === projectId);
         document.getElementById('taskModalTitle').textContent = p ? `${p.name} · 할 일 추가` : '단독 할 일 추가';
         document.getElementById('taskName').value = '';
+        document.getElementById('taskName').placeholder = optional ? '할 일 내용 (없으면 그냥 추가 눌러도 돼요)' : '할 일 내용';
         document.getElementById('taskDateGroup').style.display = 'block';
         document.getElementById('taskProjectRangeBtnWrap').style.display = p ? 'block' : 'none';
         document.getElementById('taskDateHint').textContent = p
@@ -2964,7 +2967,10 @@
     }
     function saveTask() {
         const name = document.getElementById('taskName').value.trim();
-        if (!name) { showToast('할 일 내용을 입력해 주세요'); return; }
+        if (!name) {
+            if (taskModalOptional) { closeOverlay('taskOverlay'); return; } // 선택사항이면 내용 없이도 그냥 넘어감(프로젝트만 생성됨)
+            showToast('할 일 내용을 입력해 주세요'); return;
+        }
 
         if (editingTask) {
             const t = findTask(editingTask.projectId, editingTask.taskId); if (!t) return;
