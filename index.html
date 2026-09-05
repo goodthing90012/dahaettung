@@ -308,7 +308,7 @@
 
         <div id="gcalSyncWrap" style="display:none; align-items:center; justify-content:space-between; padding:6px 10px; margin-bottom:10px; background:#fdecea; border-radius:9px;">
             <span id="gcalSyncStatus" style="font-size:11px; color:#c0392b;"></span>
-            <button class="mini-add" style="width:auto; margin:0; padding:4px 10px; font-size:11px; border-color:#e0a0a0; color:#c0392b;" onclick="manualSyncGCal()">🔄 구글 캘린더 동기화</button>
+            <button id="gcalSyncBtn" class="mini-add" style="width:auto; margin:0; padding:4px 10px; font-size:11px; border-color:#e0a0a0; color:#c0392b;" onclick="handleGCalSyncBtnClick()">🔄 구글 캘린더 동기화</button>
         </div>
 
         <div class="card">
@@ -928,7 +928,6 @@
     let gCalTokenClient = null;
     let gCalAccessToken = null;
     let gCalConnectedEmail = null;
-    let gCalSilentAttempt = false; // true면 사용자가 직접 누른 게 아니라 새로고침 후 자동 재연결 시도 중 — 실패해도 에러 토스트 안 띄움
     let gCalEventsCache = {}; // { 'YYYY-MM-DD': { events, complete } }
     let gCalCalendarList = null; // [{id, summary}] 이 세션 동안 캐시(구독 중인 전체 캘린더 목록)
 
@@ -942,18 +941,16 @@
             client_id: GOOGLE_CLIENT_ID,
             scope: 'https://www.googleapis.com/auth/calendar.readonly',
             callback: async (resp) => {
-                const wasSilent = gCalSilentAttempt;
-                gCalSilentAttempt = false;
                 if (resp.error) {
-                    if (!wasSilent) showToast(resp.error === 'access_denied' ? '연결이 취소됐어요' : `연결 실패: ${resp.error}`);
-                    return; // 조용한 자동 재연결 시도였으면 실패해도 그냥 "연결 안 됨" 상태로 조용히 남음
+                    showToast(resp.error === 'access_denied' ? '연결이 취소됐어요' : `연결 실패: ${resp.error}`);
+                    return;
                 }
                 gCalAccessToken = resp.access_token;
                 gCalEventsCache = {};
                 gCalWasConnected = true; saveToStorage();
                 await fetchGCalUserInfo();
                 renderGCalSettingsStatus();
-                if (!wasSilent) showToast('📅 구글 캘린더가 연결됐어요');
+                showToast('📅 구글 캘린더가 연결됐어요');
                 if (document.getElementById('tab-check').classList.contains('active')) syncGCalEventsForCheckDate();
             },
         });
@@ -962,19 +959,6 @@
     function connectGoogleCalendar() {
         if (!initGCalTokenClient()) return;
         gCalTokenClient.requestAccessToken({ prompt: gCalAccessToken ? '' : 'consent' });
-    }
-    // 새로고침/재실행 직후 — 이전에 연결한 적 있으면 사용자 조작 없이 조용히 재연결을 한 번 시도해봄
-    // (팝업 차단 등으로 실패할 수 있고, 그때는 그냥 "연결 안 됨"으로 남음 — 에러 토스트도 안 띄움)
-    function attemptGCalSilentReconnect(retriesLeft) {
-        if (!gCalWasConnected || gCalAccessToken) return;
-        if (!window.google || !google.accounts || !google.accounts.oauth2) {
-            // GIS 스크립트가 아직 로딩 중일 수 있어서 잠깐 기다렸다 재시도(최대 몇 번, 조용히)
-            if (retriesLeft > 0) setTimeout(() => attemptGCalSilentReconnect(retriesLeft - 1), 400);
-            return;
-        }
-        if (!initGCalTokenClient()) return;
-        gCalSilentAttempt = true;
-        gCalTokenClient.requestAccessToken({ prompt: '' });
     }
     function disconnectGoogleCalendar() {
         if (gCalAccessToken && window.google && google.accounts && google.accounts.oauth2) {
@@ -1166,8 +1150,11 @@
         return { created, updated, deleted };
     }
     // "🔄 동기화" 버튼 — 캐시 무시하고 강제로 새로 받아와서 생성/갱신/정리, 결과를 토스트로 안내
+    function handleGCalSyncBtnClick() {
+        if (gCalAccessToken) { manualSyncGCal(); } else { connectGoogleCalendar(); }
+    }
     async function manualSyncGCal() {
-        if (!gCalAccessToken) { showToast('먼저 설정에서 구글 캘린더를 연결해 주세요'); return; }
+        if (!gCalAccessToken) { connectGoogleCalendar(); return; }
         showToast('동기화 중…');
         const { created, updated, deleted } = await syncGCalEventsForCheckDate(true);
         renderGCalSyncStatus();
@@ -1178,12 +1165,20 @@
         if (deleted) parts.push(`${deleted}개 정리`);
         showToast(`✅ ${parts.join(' · ')}됐어요`);
     }
+    // 연결 여부와 무관하게 항상 표시 — 연결 전엔 "연동하기" 버튼, 연결 후엔 "동기화" 버튼으로 같은 자리에서 전환
     function renderGCalSyncStatus() {
         const wrap = document.getElementById('gcalSyncWrap'); if (!wrap) return;
-        wrap.style.display = gCalAccessToken ? 'flex' : 'none';
-        const statusEl = document.getElementById('gcalSyncStatus'); if (!statusEl) return;
-        const now = new Date();
-        statusEl.textContent = `마지막 확인: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        wrap.style.display = isGCalConfigured() ? 'flex' : 'none';
+        const statusEl = document.getElementById('gcalSyncStatus'), btnEl = document.getElementById('gcalSyncBtn');
+        if (!statusEl || !btnEl) return;
+        if (gCalAccessToken) {
+            const now = new Date();
+            statusEl.textContent = `마지막 확인: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            btnEl.textContent = '🔄 구글 캘린더 동기화';
+        } else {
+            statusEl.textContent = '구글 캘린더 연동 안 됨';
+            btnEl.textContent = '🔗 구글 캘린더 연동하기';
+        }
     }
 
     const saved = loadFromStorage();
@@ -4119,7 +4114,6 @@
         renderProjectMng();
         updateLastSavedLabel();
         checkPendingShare();
-        attemptGCalSilentReconnect(5); // 최대 5번(약 2초) 짧게 재시도, 안 되면 조용히 포기
     };
 
     if ('serviceWorker' in navigator) {
