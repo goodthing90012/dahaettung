@@ -306,9 +306,9 @@
             <button class="today-btn" id="checkTodayBtn" onclick="goCheckToday()">오늘</button>
         </div>
 
-        <div class="card" id="gcalEventsWrap" style="display:none;">
-            <div class="section-title">📅 구글 캘린더</div>
-            <div id="gcalEventsList"></div>
+        <div id="gcalSyncWrap" style="display:none; align-items:center; justify-content:space-between; padding:6px 10px; margin-bottom:10px; background:#fdecea; border-radius:9px;">
+            <span id="gcalSyncStatus" style="font-size:11px; color:#c0392b;"></span>
+            <button class="mini-add" style="width:auto; margin:0; padding:4px 10px; font-size:11px; border-color:#e0a0a0; color:#c0392b;" onclick="manualSyncGCal()">🔄 구글 캘린더 동기화</button>
         </div>
 
         <div class="card">
@@ -943,7 +943,7 @@
                 await fetchGCalUserInfo();
                 renderGCalSettingsStatus();
                 showToast('📅 구글 캘린더가 연결됐어요');
-                if (document.getElementById('tab-check').classList.contains('active')) loadGCalEventsForCheckDate();
+                if (document.getElementById('tab-check').classList.contains('active')) syncGCalEventsForCheckDate();
             },
         });
         return true;
@@ -956,9 +956,8 @@
         if (gCalAccessToken && window.google && google.accounts && google.accounts.oauth2) {
             google.accounts.oauth2.revoke(gCalAccessToken, () => {});
         }
-        gCalAccessToken = null; gCalConnectedEmail = null; gCalEventsCache = {};
+        gCalAccessToken = null; gCalConnectedEmail = null; gCalEventsCache = {}; gCalCalendarIds = null;
         renderGCalSettingsStatus();
-        document.getElementById('gcalEventsWrap').style.display = 'none';
         showToast('연결을 해제했어요');
     }
     async function fetchGCalUserInfo() {
@@ -976,79 +975,163 @@
         if (disconnectBtn) disconnectBtn.style.display = gCalAccessToken ? '' : 'none';
     }
     // 그 날짜의 구글 캘린더 일정 가져오기 (당일 단위 캐시)
+    let gCalCalendarIds = null; // 이 세션 동안 캘린더 목록 캐시(구독 중인 모든 캘린더 — 팀 공유 캘린더 등 포함)
+    async function fetchGCalCalendarIds() {
+        if (gCalCalendarIds) return gCalCalendarIds;
+        try {
+            const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+                headers: { Authorization: 'Bearer ' + gCalAccessToken }
+            });
+            if (!res.ok) return ['primary'];
+            const data = await res.json();
+            const ids = (data.items || []).map(c => c.id);
+            gCalCalendarIds = ids.length ? ids : ['primary'];
+            return gCalCalendarIds;
+        } catch (e) { return ['primary']; }
+    }
     async function fetchGCalEventsForDate(dateStr) {
-        if (!gCalAccessToken) return [];
+        if (!gCalAccessToken) return { events: [], complete: false };
         if (gCalEventsCache[dateStr]) return gCalEventsCache[dateStr];
         const timeMin = new Date(dateStr + 'T00:00:00').toISOString();
         const timeMax = new Date(dateStr + 'T23:59:59').toISOString();
-        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
-        try {
-            const res = await fetch(url, { headers: { Authorization: 'Bearer ' + gCalAccessToken } });
-            if (res.status === 401) {
-                gCalAccessToken = null; renderGCalSettingsStatus();
-                showToast('구글 인증이 만료됐어요. 설정에서 다시 연결해 주세요');
-                return [];
-            }
-            if (!res.ok) return [];
-            const data = await res.json();
-            const events = (data.items || []).map(ev => {
-                const allDay = !!(ev.start && ev.start.date);
-                const startDate = ev.start ? (ev.start.dateTime || ev.start.date) : null;
-                // 구글 종일 이벤트의 end.date는 "다음날 0시"(배타적)라서, 실제 마지막 날은 하루 빼야 함
-                const endDateRaw = ev.end ? (ev.end.dateTime || ev.end.date) : null;
-                const endDate = (allDay && endDateRaw) ? addDaysStr(endDateRaw, -1) : endDateRaw;
-                const isMultiDay = allDay && endDate && endDate > startDate;
-                return { id: ev.id, title: ev.summary || '(제목 없음)', allDay, start: startDate, endDate, isMultiDay };
-            });
-            gCalEventsCache[dateStr] = events;
-            return events;
-        } catch (e) { return []; }
+        const calIds = await fetchGCalCalendarIds();
+        let allEvents = [];
+        let complete = true; // 캘린더 중 하나라도 조회 실패하면 false — 삭제 감지는 이게 true일 때만 함
+        for (const calId of calIds) {
+            const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+            try {
+                const res = await fetch(url, { headers: { Authorization: 'Bearer ' + gCalAccessToken } });
+                if (res.status === 401) {
+                    gCalAccessToken = null; renderGCalSettingsStatus();
+                    showToast('구글 인증이 만료됐어요. 설정에서 다시 연결해 주세요');
+                    return { events: [], complete: false };
+                }
+                if (!res.ok) { complete = false; continue; } // 이 캘린더 하나만 실패해도 나머지는 계속 조회
+                const data = await res.json();
+                const events = (data.items || []).map(ev => {
+                    const allDay = !!(ev.start && ev.start.date);
+                    const startDate = ev.start ? (ev.start.dateTime || ev.start.date) : null;
+                    // 구글 종일 이벤트의 end.date는 "다음날 0시"(배타적)라서, 실제 마지막 날은 하루 빼야 함
+                    const endDateRaw = ev.end ? (ev.end.dateTime || ev.end.date) : null;
+                    const endDate = (allDay && endDateRaw) ? addDaysStr(endDateRaw, -1) : endDateRaw;
+                    const isMultiDay = allDay && endDate && endDate > startDate;
+                    return { id: ev.id, title: ev.summary || '(제목 없음)', allDay, start: startDate, endDate, isMultiDay };
+                });
+                allEvents = allEvents.concat(events);
+            } catch (e) { complete = false; /* 이 캘린더만 건너뜀 */ }
+        }
+        // 여러 캘린더에 겹쳐 보이는 경우(내 캘린더+공유 캘린더 등) id 기준으로 중복 제거
+        const seen = {};
+        const deduped = allEvents.filter(ev => { if (seen[ev.id]) return false; seen[ev.id] = true; return true; });
+        deduped.sort((a, b) => String(a.start).localeCompare(String(b.start)));
+        const result = { events: deduped, complete };
+        gCalEventsCache[dateStr] = result;
+        return result;
     }
-    // 이 구글 이벤트가 이미 프로젝트로 들어와 있는지
+    // 이 구글 이벤트가 이미 프로젝트/할일로 들어와 있는지
     function gcalImportedProject(gcalEventId) {
         return projects.find(p => p.gcalEventId === gcalEventId) || null;
     }
-    function importGCalEventAsProject(gcalEventId, title, startDate, endDate) {
-        const existing = gcalImportedProject(gcalEventId);
-        if (existing) { showToast('이미 프로젝트로 가져왔어요'); return; }
-        const newId = Date.now();
-        projects.push({ id: newId, name: title, emoji: '📅', color: PROJECT_COLORS[0], startDate, endDate, memos: [], tasks: [], gcalEventId });
-        syncAll();
-        showToast('📁 프로젝트로 가져왔어요');
-        loadGCalEventsForCheckDate();
+    function gcalImportedTask(gcalEventId) {
+        return standaloneTasks.find(t => t.gcalEventId === gcalEventId) || null;
     }
-    // 체크 탭에 오늘(보고 있는 날짜)의 구글 캘린더 일정 표시
-    async function loadGCalEventsForCheckDate() {
-        const wrap = document.getElementById('gcalEventsWrap'); if (!wrap) return;
-        if (!gCalAccessToken) { wrap.style.display = 'none'; return; }
-        wrap.style.display = '';
-        const listEl = document.getElementById('gcalEventsList');
-        listEl.innerHTML = '<div style="font-size:12px; color:#bbb;">불러오는 중…</div>';
+    // 체크 탭에서 그 날짜를 볼 때, 구글 캘린더 일정을 가져와서 반영한다.
+    // 종일 일정은 프로젝트로, 시간 있는 일정은 단독 할 일(체크 가능)로 반영.
+    // 새 이벤트는 새로 만들고, 이미 가져온 이벤트는 이름/날짜를 구글 쪽 최신 내용으로 갱신한다(제목 변경·시간 변경 등 반영).
+    // 구글에서 삭제/취소된 이벤트는(조회가 완전히 성공했을 때만) 로컬에서도 정리 — 단, 사용자가 할 일/메모를 추가해둔 프로젝트나
+    // 완료했거나 메모가 달린 할 일은 안전하게 보호(자동 삭제 대신 gcalEventId만 떼어 일반 항목으로 남김).
+    // { created, updated, deleted } 개수를 반환.
+    async function syncGCalEventsForCheckDate(forceRefresh) {
+        if (!gCalAccessToken) return { created: 0, updated: 0, deleted: 0 };
         const dateAtRequest = checkDateStr;
-        const events = await fetchGCalEventsForDate(dateAtRequest);
-        if (dateAtRequest !== checkDateStr) return; // 그 사이 날짜를 이동했으면 결과 버림
-        if (!events.length) { listEl.innerHTML = '<div style="font-size:12px; color:#bbb;">이 날 일정이 없어요</div>'; return; }
-        // 여러 날짜에 걸친 종일 일정(배너형)은 위에 강조해서, 나머지 시간 일정은 그 아래 목록으로
-        const multiDay = events.filter(ev => ev.isMultiDay);
-        const regular = events.filter(ev => !ev.isMultiDay);
-        const bannerHtml = multiDay.map(ev => {
-            const imported = gcalImportedProject(ev.id);
-            const actionHtml = imported
-                ? `<span style="font-size:11px; color:#c0392b; white-space:nowrap;">✅ 프로젝트에 있음</span>`
-                : `<button class="mini-add" style="width:auto; margin:0; padding:5px 9px; font-size:11px; white-space:nowrap; border-color:#e0a0a0; color:#c0392b;" onclick="importGCalEventAsProject(${jsStrLit(ev.id)}, ${jsStrLit(ev.title)}, ${jsStrLit(ev.start)}, ${jsStrLit(ev.endDate)})">📁 프로젝트로 가져오기</button>`;
-            return `<div style="display:flex; align-items:center; gap:8px; background:#fdecea; border-radius:8px; padding:8px 10px; margin-bottom:6px;">
-                <div style="flex:1; min-width:0;">
-                    <div style="font-size:13px; font-weight:bold; color:#c0392b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(ev.title)}</div>
-                    <div style="font-size:11px; color:#c0392b; opacity:.8;">${ev.start} ~ ${ev.endDate}</div>
-                </div>
-                ${actionHtml}
-            </div>`;
-        }).join('');
-        const listHtml = regular.map(ev => {
-            const timeLabel = ev.allDay ? '종일' : new Date(ev.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-            return `<div style="display:flex; gap:8px; font-size:13px; padding:5px 0; border-bottom:1px solid #f2f2f2;"><b style="flex:0 0 auto; color:var(--primary-dark);">${timeLabel}</b><span>${escapeHtml(ev.title)}</span></div>`;
-        }).join('');
-        listEl.innerHTML = bannerHtml + listHtml;
+        if (forceRefresh) delete gCalEventsCache[dateAtRequest]; // 강제 동기화는 캐시 무시하고 새로 받아옴
+        const { events, complete } = await fetchGCalEventsForDate(dateAtRequest);
+        if (dateAtRequest !== checkDateStr) return { created: 0, updated: 0, deleted: 0 }; // 그 사이 날짜를 이동했으면 결과 버림
+        let created = 0, updated = 0, deleted = 0;
+        const seenIds = {};
+        events.forEach(ev => {
+            seenIds[ev.id] = true;
+            if (ev.allDay) {
+                const existing = gcalImportedProject(ev.id);
+                const endDate = ev.endDate || ev.start;
+                if (!existing) {
+                    projects.push({
+                        id: Date.now() + Math.floor(Math.random() * 100000), name: ev.title, emoji: '📅',
+                        color: PROJECT_COLORS[0], startDate: ev.start, endDate, memos: [], tasks: [], gcalEventId: ev.id,
+                    });
+                    created++;
+                } else if (existing.name !== ev.title || existing.startDate !== ev.start || existing.endDate !== endDate) {
+                    existing.name = ev.title; existing.startDate = ev.start; existing.endDate = endDate;
+                    // 기간이 바뀌어 밖으로 밀려난 할 일은 경계 날짜로 자동 이동(수동 수정 때와 동일한 규칙)
+                    const out = outOfRangeTasks(existing);
+                    if (out.length) out.forEach(t => { t.date = (t.date < existing.startDate) ? existing.startDate : existing.endDate; });
+                    updated++;
+                }
+            } else {
+                const timeLabel = new Date(ev.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                const displayName = `${timeLabel} · ${ev.title}`;
+                const existing = gcalImportedTask(ev.id);
+                if (!existing) {
+                    standaloneTasks.push({
+                        id: Date.now() + Math.floor(Math.random() * 100000), date: dateAtRequest,
+                        name: displayName, done: false, memos: [], gcalEventId: ev.id,
+                    });
+                    created++;
+                } else if (existing.name !== displayName || existing.date !== dateAtRequest) {
+                    if (existing.date !== dateAtRequest) {
+                        // 날짜가 바뀌면 연결된 메모도 같이 옮김
+                        memosForTask(null, existing.id).forEach(m => { m.date = dateAtRequest; });
+                    }
+                    existing.name = displayName; existing.date = dateAtRequest;
+                    updated++;
+                }
+            }
+        });
+        // 구글에서 사라진(삭제/취소된) 이벤트 정리 — 이번 조회가 완전히 성공했을 때만(네트워크 오류로 응답이 비어서 오탐 삭제되는 사고 방지)
+        if (complete) {
+            projects = projects.filter(p => {
+                if (!p.gcalEventId || seenIds[p.gcalEventId]) return true; // 이번 조회 대상 아니거나 여전히 존재
+                if (!(p.startDate <= dateAtRequest && dateAtRequest <= p.endDate)) return true; // 이 날짜 담당 이벤트 아님
+                const hasContent = p.tasks && p.tasks.length > 0; // 할 일을 추가해둔 프로젝트는 보호(메모는 할 일에 딸린 것이라 할일 유무로 충분)
+                if (hasContent) { delete p.gcalEventId; return true; } // 안 지우고 그냥 일반 프로젝트로 남김
+                deleted++;
+                return false;
+            });
+            standaloneTasks = standaloneTasks.filter(t => {
+                if (!t.gcalEventId || seenIds[t.gcalEventId]) return true;
+                if (t.date !== dateAtRequest) return true;
+                if (t.done) { delete t.gcalEventId; return true; } // 완료한 할 일은 기록으로 보호, 그대로 유지
+                const linkedMemos = memosForTask(null, t.id);
+                if (linkedMemos.length) {
+                    // 할 일 자체는 지우되, 메모는 연결만 끊어서 메모 탭에 그대로 남김
+                    linkedMemos.forEach(m => { m.link = null; });
+                }
+                deleted++;
+                return false;
+            });
+        }
+        if (created || updated || deleted) { saveToStorage(); renderCheckTab(); } // 캐시+gcalEventId 확인 덕에 다음 호출에선 변화 없어 안전하게 멈춤
+        return { created, updated, deleted };
+    }
+    // "🔄 동기화" 버튼 — 캐시 무시하고 강제로 새로 받아와서 생성/갱신/정리, 결과를 토스트로 안내
+    async function manualSyncGCal() {
+        if (!gCalAccessToken) { showToast('먼저 설정에서 구글 캘린더를 연결해 주세요'); return; }
+        showToast('동기화 중…');
+        const { created, updated, deleted } = await syncGCalEventsForCheckDate(true);
+        renderGCalSyncStatus();
+        if (!created && !updated && !deleted) { showToast('변경사항이 없어요'); return; }
+        const parts = [];
+        if (created) parts.push(`${created}개 추가`);
+        if (updated) parts.push(`${updated}개 갱신`);
+        if (deleted) parts.push(`${deleted}개 정리`);
+        showToast(`✅ ${parts.join(' · ')}됐어요`);
+    }
+    function renderGCalSyncStatus() {
+        const wrap = document.getElementById('gcalSyncWrap'); if (!wrap) return;
+        wrap.style.display = gCalAccessToken ? 'flex' : 'none';
+        const statusEl = document.getElementById('gcalSyncStatus'); if (!statusEl) return;
+        const now = new Date();
+        statusEl.textContent = `마지막 확인: ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     }
 
     const saved = loadFromStorage();
@@ -2262,7 +2345,8 @@
     }
 
     function renderCheckTab() {
-        loadGCalEventsForCheckDate();
+        syncGCalEventsForCheckDate();
+        renderGCalSyncStatus();
         const isToday = checkDateStr === getTodayStr();
         const isFuture = checkDateStr > getTodayStr();
         document.getElementById('checkDateLabel').textContent = isToday ? `오늘 · ${krLabel(checkDateStr)}` : (isFuture ? `예정 · ${krLabel(checkDateStr)}` : krLabel(checkDateStr));
