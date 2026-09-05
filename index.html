@@ -250,6 +250,7 @@
 
         .toast { position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.9); color: white; padding: 12px 20px; border-radius: 24px; font-size: 13px; display: none; z-index: 1000; text-align: center; width: 80%; box-sizing: border-box; }
     </style>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div class="phone-mockup">
@@ -289,6 +290,11 @@
                 <span><span class="lg-mark">📒</span> 메모 있음</span>
             </div>
         </div>
+
+        <div class="card">
+            <div class="section-title">📊 루틴 통계 <span style="font-weight:normal; color:var(--gray); font-size:11px;">· 잘 지킨 순</span></div>
+            <div id="routineStatsList"></div>
+        </div>
     </div>
 
     <!-- 체크 -->
@@ -298,6 +304,11 @@
             <div class="lbl" id="checkDateLabel" onclick="openCheckDatePicker()" style="cursor:pointer; text-decoration:underline dotted;"></div>
             <button onclick="changeCheckDate(1)" id="checkDateNext">›</button>
             <button class="today-btn" id="checkTodayBtn" onclick="goCheckToday()">오늘</button>
+        </div>
+
+        <div class="card" id="gcalEventsWrap" style="display:none;">
+            <div class="section-title">📅 구글 캘린더</div>
+            <div id="gcalEventsList"></div>
         </div>
 
         <div class="card">
@@ -443,6 +454,14 @@
             <p style="font-size:12px; color:#666; line-height:1.6; margin:0;">
                 다했텅은 다썼텅의 자매 앱이에요. 매일 반복하는 <b>루틴</b>과 기간을 가진 <b>프로젝트·일정</b>을 한곳에서 기록하고, 달력에서 한눈에 확인해요. 루텅이가 오늘의 완료를 응원해요.
             </p>
+        </div>
+
+        <div class="card">
+            <div class="section-title">🗓 구글 캘린더 연동 (읽기 전용)</div>
+            <div id="gcalStatus" style="font-size:13px; color:var(--gray); margin-bottom:8px;">연결 안 됨</div>
+            <button id="gcalConnectBtn" class="btn btn-primary" style="width:100%;" onclick="connectGoogleCalendar()">구글 계정 연결하기</button>
+            <button id="gcalDisconnectBtn" class="btn btn-ghost" style="width:100%; display:none;" onclick="disconnectGoogleCalendar()">연결 해제</button>
+            <p style="font-size:11px; color:#aaa; margin-top:10px; line-height:1.6;">체크 탭에서 그 날짜의 구글 캘린더 일정을 볼 수 있어요(다했텅에서 수정하지 않아요, 읽기 전용). 회사 계정은 관리자 정책에 따라 연결이 차단될 수 있어요.</p>
         </div>
     </div>
 
@@ -897,6 +916,141 @@
         el.textContent = `${formatDateString(+t)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
+    // ══════════ 구글 캘린더 연동 (읽기 전용) ══════════
+    // ⚠️ 아래 클라이언트 ID를 구글 클라우드 콘솔에서 발급받은 본인의 OAuth 클라이언트 ID로 교체해야 동작함
+    const GOOGLE_CLIENT_ID = '132719792552-d2d10gadi7bm2thsabt2vst4e47f1ueh.apps.googleusercontent.com';
+    let gCalTokenClient = null;
+    let gCalAccessToken = null;
+    let gCalConnectedEmail = null;
+    let gCalEventsCache = {}; // { 'YYYY-MM-DD': [{title, allDay, start}] }
+
+    function isGCalConfigured() { return GOOGLE_CLIENT_ID && !GOOGLE_CLIENT_ID.startsWith('PASTE_'); }
+
+    function initGCalTokenClient() {
+        if (gCalTokenClient) return true;
+        if (!isGCalConfigured()) { showToast('⚠️ 아직 구글 클라이언트 ID가 설정되지 않았어요'); return false; }
+        if (!window.google || !google.accounts || !google.accounts.oauth2) { showToast('구글 로그인 준비 중이에요. 잠시 후 다시 시도해 주세요'); return false; }
+        gCalTokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: 'https://www.googleapis.com/auth/calendar.readonly',
+            callback: async (resp) => {
+                if (resp.error) {
+                    showToast(resp.error === 'access_denied' ? '연결이 취소됐어요' : `연결 실패: ${resp.error}`);
+                    return;
+                }
+                gCalAccessToken = resp.access_token;
+                gCalEventsCache = {};
+                await fetchGCalUserInfo();
+                renderGCalSettingsStatus();
+                showToast('📅 구글 캘린더가 연결됐어요');
+                if (document.getElementById('tab-check').classList.contains('active')) loadGCalEventsForCheckDate();
+            },
+        });
+        return true;
+    }
+    function connectGoogleCalendar() {
+        if (!initGCalTokenClient()) return;
+        gCalTokenClient.requestAccessToken({ prompt: gCalAccessToken ? '' : 'consent' });
+    }
+    function disconnectGoogleCalendar() {
+        if (gCalAccessToken && window.google && google.accounts && google.accounts.oauth2) {
+            google.accounts.oauth2.revoke(gCalAccessToken, () => {});
+        }
+        gCalAccessToken = null; gCalConnectedEmail = null; gCalEventsCache = {};
+        renderGCalSettingsStatus();
+        document.getElementById('gcalEventsWrap').style.display = 'none';
+        showToast('연결을 해제했어요');
+    }
+    async function fetchGCalUserInfo() {
+        try {
+            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + gCalAccessToken } });
+            const data = await res.json();
+            gCalConnectedEmail = data.email || null;
+        } catch (e) { gCalConnectedEmail = null; }
+    }
+    function renderGCalSettingsStatus() {
+        const statusEl = document.getElementById('gcalStatus'); if (!statusEl) return;
+        statusEl.textContent = gCalAccessToken ? `✅ 연결됨${gCalConnectedEmail ? ' · ' + gCalConnectedEmail : ''}` : '연결 안 됨';
+        const connectBtn = document.getElementById('gcalConnectBtn'), disconnectBtn = document.getElementById('gcalDisconnectBtn');
+        if (connectBtn) connectBtn.style.display = gCalAccessToken ? 'none' : '';
+        if (disconnectBtn) disconnectBtn.style.display = gCalAccessToken ? '' : 'none';
+    }
+    // 그 날짜의 구글 캘린더 일정 가져오기 (당일 단위 캐시)
+    async function fetchGCalEventsForDate(dateStr) {
+        if (!gCalAccessToken) return [];
+        if (gCalEventsCache[dateStr]) return gCalEventsCache[dateStr];
+        const timeMin = new Date(dateStr + 'T00:00:00').toISOString();
+        const timeMax = new Date(dateStr + 'T23:59:59').toISOString();
+        const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+        try {
+            const res = await fetch(url, { headers: { Authorization: 'Bearer ' + gCalAccessToken } });
+            if (res.status === 401) {
+                gCalAccessToken = null; renderGCalSettingsStatus();
+                showToast('구글 인증이 만료됐어요. 설정에서 다시 연결해 주세요');
+                return [];
+            }
+            if (!res.ok) return [];
+            const data = await res.json();
+            const events = (data.items || []).map(ev => {
+                const allDay = !!(ev.start && ev.start.date);
+                const startDate = ev.start ? (ev.start.dateTime || ev.start.date) : null;
+                // 구글 종일 이벤트의 end.date는 "다음날 0시"(배타적)라서, 실제 마지막 날은 하루 빼야 함
+                const endDateRaw = ev.end ? (ev.end.dateTime || ev.end.date) : null;
+                const endDate = (allDay && endDateRaw) ? addDaysStr(endDateRaw, -1) : endDateRaw;
+                const isMultiDay = allDay && endDate && endDate > startDate;
+                return { id: ev.id, title: ev.summary || '(제목 없음)', allDay, start: startDate, endDate, isMultiDay };
+            });
+            gCalEventsCache[dateStr] = events;
+            return events;
+        } catch (e) { return []; }
+    }
+    // 이 구글 이벤트가 이미 프로젝트로 들어와 있는지
+    function gcalImportedProject(gcalEventId) {
+        return projects.find(p => p.gcalEventId === gcalEventId) || null;
+    }
+    function importGCalEventAsProject(gcalEventId, title, startDate, endDate) {
+        const existing = gcalImportedProject(gcalEventId);
+        if (existing) { showToast('이미 프로젝트로 가져왔어요'); return; }
+        const newId = Date.now();
+        projects.push({ id: newId, name: title, emoji: '📅', color: PROJECT_COLORS[0], startDate, endDate, memos: [], tasks: [], gcalEventId });
+        syncAll();
+        showToast('📁 프로젝트로 가져왔어요');
+        loadGCalEventsForCheckDate();
+    }
+    // 체크 탭에 오늘(보고 있는 날짜)의 구글 캘린더 일정 표시
+    async function loadGCalEventsForCheckDate() {
+        const wrap = document.getElementById('gcalEventsWrap'); if (!wrap) return;
+        if (!gCalAccessToken) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        const listEl = document.getElementById('gcalEventsList');
+        listEl.innerHTML = '<div style="font-size:12px; color:#bbb;">불러오는 중…</div>';
+        const dateAtRequest = checkDateStr;
+        const events = await fetchGCalEventsForDate(dateAtRequest);
+        if (dateAtRequest !== checkDateStr) return; // 그 사이 날짜를 이동했으면 결과 버림
+        if (!events.length) { listEl.innerHTML = '<div style="font-size:12px; color:#bbb;">이 날 일정이 없어요</div>'; return; }
+        // 여러 날짜에 걸친 종일 일정(배너형)은 위에 강조해서, 나머지 시간 일정은 그 아래 목록으로
+        const multiDay = events.filter(ev => ev.isMultiDay);
+        const regular = events.filter(ev => !ev.isMultiDay);
+        const bannerHtml = multiDay.map(ev => {
+            const imported = gcalImportedProject(ev.id);
+            const actionHtml = imported
+                ? `<span style="font-size:11px; color:#c0392b; white-space:nowrap;">✅ 프로젝트에 있음</span>`
+                : `<button class="mini-add" style="width:auto; margin:0; padding:5px 9px; font-size:11px; white-space:nowrap; border-color:#e0a0a0; color:#c0392b;" onclick="importGCalEventAsProject(${jsStrLit(ev.id)}, ${jsStrLit(ev.title)}, ${jsStrLit(ev.start)}, ${jsStrLit(ev.endDate)})">📁 프로젝트로 가져오기</button>`;
+            return `<div style="display:flex; align-items:center; gap:8px; background:#fdecea; border-radius:8px; padding:8px 10px; margin-bottom:6px;">
+                <div style="flex:1; min-width:0;">
+                    <div style="font-size:13px; font-weight:bold; color:#c0392b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(ev.title)}</div>
+                    <div style="font-size:11px; color:#c0392b; opacity:.8;">${ev.start} ~ ${ev.endDate}</div>
+                </div>
+                ${actionHtml}
+            </div>`;
+        }).join('');
+        const listHtml = regular.map(ev => {
+            const timeLabel = ev.allDay ? '종일' : new Date(ev.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+            return `<div style="display:flex; gap:8px; font-size:13px; padding:5px 0; border-bottom:1px solid #f2f2f2;"><b style="flex:0 0 auto; color:var(--primary-dark);">${timeLabel}</b><span>${escapeHtml(ev.title)}</span></div>`;
+        }).join('');
+        listEl.innerHTML = bannerHtml + listHtml;
+    }
+
     const saved = loadFromStorage();
     let routines = (saved && Array.isArray(saved.routines)) ? saved.routines : [];
     let projects = (saved && Array.isArray(saved.projects)) ? saved.projects : [];
@@ -1023,7 +1177,7 @@
         if (name === 'memo') renderMemoTab();
         if (name === 'photocal') renderPhotoCalendar();
         if (name === 'manage') { renderRoutineMng(); renderCycleMng(); renderWeekdayMng(); renderProjectMng(); }
-        if (name === 'settings') updateLastSavedLabel();
+        if (name === 'settings') { updateLastSavedLabel(); renderGCalSettingsStatus(); }
     }
 
     // ══════════ 홈 · 달력 ══════════
@@ -1054,6 +1208,7 @@
         document.getElementById('briefingPreview').innerHTML =
             `<span>${prevLabel} · 오늘 ${countDone(tTasks)}/${tTasks.length}</span><span class="go">브리핑 보기 ›</span>`;
         renderCalendar();
+        renderRoutineStats();
     }
     // 그날 카테고리+사진이 붙은 메모 중 첫 번째 → 달력 칸 배경 사진용
     // 그날 사진이 있는 메모들 (카테고리 무관, 순서대로)
@@ -1516,6 +1671,69 @@
         if (r.createdAt) return r.createdAt;
         if (r.id) return formatDateString(r.id);
         return null;
+    }
+    // ══════════ 루틴 통계 (잘 지킨 순 랭킹) ══════════
+    // 생성일부터 오늘까지, "해야 했던 날(=due)" 대비 "실제로 한 날(=done)"을 세서 완수율을 냄.
+    // 완료주기/요일중한번 루틴도 routineCheckState가 이미 주기 단위를 하루 단위로 환산해줘서 같은 방식으로 셀 수 있음.
+    function regularRoutineStats(r) {
+        const created = routineCreatedStr(r);
+        if (!created) return { done: 0, due: 0 };
+        const today = getTodayStr();
+        let done = 0, due = 0;
+        for (let d = created; d <= today; d = addDaysStr(d, 1)) {
+            const st = routineCheckState(r, d);
+            if (st === 'checked') { done++; due++; }
+            else if (st === 'due') { due++; }
+        }
+        return { done, due };
+    }
+    function cycleRoutineStats(cr) {
+        const created = routineCreatedStr(cr);
+        if (!created) return { done: 0, due: 0 };
+        const today = getTodayStr();
+        let done = 0, due = 0;
+        for (let d = created; d <= today; d = addDaysStr(d, 1)) {
+            if (!cycleActiveOnDay(cr, d)) continue;
+            due++;
+            if (cycleDoneOn(cr, d)) done++;
+        }
+        return { done, due };
+    }
+    function weekdayRoutineStats(wr) {
+        const created = routineCreatedStr(wr);
+        if (!created) return { done: 0, due: 0 };
+        const today = getTodayStr();
+        let done = 0, due = 0;
+        for (let d = created; d <= today; d = addDaysStr(d, 1)) {
+            if (!weekdayDisplayItem(wr, d)) continue; // 그날 배정된 항목 없으면 대상 아님
+            due++;
+            if (weekdayIsDone(wr, d)) done++;
+        }
+        return { done, due };
+    }
+    // 세 종류 루틴을 한 목록으로 합쳐서 완수율 순으로 정렬
+    function buildAllRoutineStats() {
+        const list = [];
+        routines.forEach(r => {
+            const { done, due } = regularRoutineStats(r);
+            if (due > 0) list.push({ name: r.name, emoji: r.emoji, done, due, rate: done / due });
+        });
+        cycleRoutines.forEach(cr => {
+            const { done, due } = cycleRoutineStats(cr);
+            if (due > 0) list.push({ name: cr.name, emoji: cr.emoji, done, due, rate: done / due });
+        });
+        weekdayRoutines.forEach(wr => {
+            const { done, due } = weekdayRoutineStats(wr);
+            if (due > 0) list.push({ name: wr.name, emoji: wr.emoji, done, due, rate: done / due });
+        });
+        list.sort((a, b) => b.rate - a.rate);
+        return list;
+    }
+    function renderRoutineStats() {
+        const el = document.getElementById('routineStatsList'); if (!el) return;
+        const list = buildAllRoutineStats();
+        if (!list.length) { el.innerHTML = '<div class="empty">아직 통계를 낼 만한 기록이 없어요</div>'; return; }
+        el.innerHTML = list.map(x => progressGaugeHtml({ emoji: x.emoji, title: x.name, current: x.done, target: x.due })).join('');
     }
     // 일반 루틴: 그날 대상인지 (생성일 이전은 대상 아님)
     function routineActiveOnDay(r, dateStr) {
@@ -2044,6 +2262,7 @@
     }
 
     function renderCheckTab() {
+        loadGCalEventsForCheckDate();
         const isToday = checkDateStr === getTodayStr();
         const isFuture = checkDateStr > getTodayStr();
         document.getElementById('checkDateLabel').textContent = isToday ? `오늘 · ${krLabel(checkDateStr)}` : (isFuture ? `예정 · ${krLabel(checkDateStr)}` : krLabel(checkDateStr));
