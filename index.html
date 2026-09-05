@@ -906,7 +906,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -928,6 +928,7 @@
     let gCalTokenClient = null;
     let gCalAccessToken = null;
     let gCalConnectedEmail = null;
+    let gCalSilentAttempt = false; // true면 사용자가 직접 누른 게 아니라 새로고침 후 자동 재연결 시도 중 — 실패해도 에러 토스트 안 띄움
     let gCalEventsCache = {}; // { 'YYYY-MM-DD': { events, complete } }
     let gCalCalendarList = null; // [{id, summary}] 이 세션 동안 캐시(구독 중인 전체 캘린더 목록)
 
@@ -941,15 +942,18 @@
             client_id: GOOGLE_CLIENT_ID,
             scope: 'https://www.googleapis.com/auth/calendar.readonly',
             callback: async (resp) => {
+                const wasSilent = gCalSilentAttempt;
+                gCalSilentAttempt = false;
                 if (resp.error) {
-                    showToast(resp.error === 'access_denied' ? '연결이 취소됐어요' : `연결 실패: ${resp.error}`);
-                    return;
+                    if (!wasSilent) showToast(resp.error === 'access_denied' ? '연결이 취소됐어요' : `연결 실패: ${resp.error}`);
+                    return; // 조용한 자동 재연결 시도였으면 실패해도 그냥 "연결 안 됨" 상태로 조용히 남음
                 }
                 gCalAccessToken = resp.access_token;
                 gCalEventsCache = {};
+                gCalWasConnected = true; saveToStorage();
                 await fetchGCalUserInfo();
                 renderGCalSettingsStatus();
-                showToast('📅 구글 캘린더가 연결됐어요');
+                if (!wasSilent) showToast('📅 구글 캘린더가 연결됐어요');
                 if (document.getElementById('tab-check').classList.contains('active')) syncGCalEventsForCheckDate();
             },
         });
@@ -959,11 +963,25 @@
         if (!initGCalTokenClient()) return;
         gCalTokenClient.requestAccessToken({ prompt: gCalAccessToken ? '' : 'consent' });
     }
+    // 새로고침/재실행 직후 — 이전에 연결한 적 있으면 사용자 조작 없이 조용히 재연결을 한 번 시도해봄
+    // (팝업 차단 등으로 실패할 수 있고, 그때는 그냥 "연결 안 됨"으로 남음 — 에러 토스트도 안 띄움)
+    function attemptGCalSilentReconnect(retriesLeft) {
+        if (!gCalWasConnected || gCalAccessToken) return;
+        if (!window.google || !google.accounts || !google.accounts.oauth2) {
+            // GIS 스크립트가 아직 로딩 중일 수 있어서 잠깐 기다렸다 재시도(최대 몇 번, 조용히)
+            if (retriesLeft > 0) setTimeout(() => attemptGCalSilentReconnect(retriesLeft - 1), 400);
+            return;
+        }
+        if (!initGCalTokenClient()) return;
+        gCalSilentAttempt = true;
+        gCalTokenClient.requestAccessToken({ prompt: '' });
+    }
     function disconnectGoogleCalendar() {
         if (gCalAccessToken && window.google && google.accounts && google.accounts.oauth2) {
             google.accounts.oauth2.revoke(gCalAccessToken, () => {});
         }
         gCalAccessToken = null; gCalConnectedEmail = null; gCalEventsCache = {}; gCalCalendarList = null;
+        gCalWasConnected = false; saveToStorage();
         renderGCalSettingsStatus();
         showToast('연결을 해제했어요');
     }
@@ -1178,6 +1196,7 @@
     let dayEmoji = (saved && saved.dayEmoji && typeof saved.dayEmoji === 'object') ? saved.dayEmoji : {}; // { '2026-08-06': '🚴‍♂️' }
     let dayCoverMemo = (saved && saved.dayCoverMemo && typeof saved.dayCoverMemo === 'object') ? saved.dayCoverMemo : {}; // { '2026-08-06': memoId } 그 날짜의 대표(커버) 사진으로 쓸 메모
     let gCalSelectedIds = (saved && Array.isArray(saved.gCalSelectedIds)) ? saved.gCalSelectedIds : null; // 구글 캘린더 중 실제로 가져올 캘린더 id들. null=아직 선택 안 함(기본은 전체)
+    let gCalWasConnected = !!(saved && saved.gCalWasConnected); // 이전에 연결한 적 있으면 새로고침 후 조용히 재연결 시도해봄
 
     // 기존에 흩어져 있던 메모들을 메모 창고로 1회 이전 (데이터 손실 방지)
     function migrateMemosToStore() {
@@ -3965,7 +3984,7 @@
         memoStore.forEach(m => (m.photos || []).forEach(pid => usedIds.add(pid)));
         const photos = {};
         usedIds.forEach(pid => { if (photoCache[pid]) photos[pid] = photoCache[pid]; });
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, photos };
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, photos };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3992,6 +4011,7 @@
                 dayEmoji = (parsed.dayEmoji && typeof parsed.dayEmoji === 'object') ? parsed.dayEmoji : {};
                 dayCoverMemo = (parsed.dayCoverMemo && typeof parsed.dayCoverMemo === 'object') ? parsed.dayCoverMemo : {};
                 gCalSelectedIds = Array.isArray(parsed.gCalSelectedIds) ? parsed.gCalSelectedIds : null;
+                gCalWasConnected = !!parsed.gCalWasConnected;
                 if (parsed.photos && typeof parsed.photos === 'object') {
                     Object.keys(parsed.photos).forEach(pid => { photoPut(pid, parsed.photos[pid]); });
                 }
@@ -4099,6 +4119,7 @@
         renderProjectMng();
         updateLastSavedLabel();
         checkPendingShare();
+        attemptGCalSilentReconnect(5); // 최대 5번(약 2초) 짧게 재시도, 안 되면 조용히 포기
     };
 
     if ('serviceWorker' in navigator) {
