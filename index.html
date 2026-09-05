@@ -462,6 +462,12 @@
             <button id="gcalConnectBtn" class="btn btn-primary" style="width:100%;" onclick="connectGoogleCalendar()">구글 계정 연결하기</button>
             <button id="gcalDisconnectBtn" class="btn btn-ghost" style="width:100%; display:none;" onclick="disconnectGoogleCalendar()">연결 해제</button>
             <p style="font-size:11px; color:#aaa; margin-top:10px; line-height:1.6;">체크 탭에서 그 날짜의 구글 캘린더 일정을 볼 수 있어요(다했텅에서 수정하지 않아요, 읽기 전용). 회사 계정은 관리자 정책에 따라 연결이 차단될 수 있어요.</p>
+            <div id="gcalCalendarPicker" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid #eee;">
+                <div style="font-size:12px; font-weight:bold; color:var(--gray); margin-bottom:4px;">가져올 캘린더 선택</div>
+                <p style="font-size:11px; color:#aaa; margin:0 0 6px;">체크 안 한 캘린더의 일정은 안 가져와요(팀 공유 캘린더의 다른 분 일정 등을 뺄 때 유용해요)</p>
+                <div id="gcalCalendarList"></div>
+                <button class="btn btn-primary btn-sm" style="width:100%; margin-top:8px;" onclick="saveGCalCalendarSelection()">선택 저장</button>
+            </div>
         </div>
     </div>
 
@@ -900,7 +906,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -922,7 +928,8 @@
     let gCalTokenClient = null;
     let gCalAccessToken = null;
     let gCalConnectedEmail = null;
-    let gCalEventsCache = {}; // { 'YYYY-MM-DD': [{title, allDay, start}] }
+    let gCalEventsCache = {}; // { 'YYYY-MM-DD': { events, complete } }
+    let gCalCalendarList = null; // [{id, summary}] 이 세션 동안 캐시(구독 중인 전체 캘린더 목록)
 
     function isGCalConfigured() { return GOOGLE_CLIENT_ID && !GOOGLE_CLIENT_ID.startsWith('PASTE_'); }
 
@@ -956,7 +963,7 @@
         if (gCalAccessToken && window.google && google.accounts && google.accounts.oauth2) {
             google.accounts.oauth2.revoke(gCalAccessToken, () => {});
         }
-        gCalAccessToken = null; gCalConnectedEmail = null; gCalEventsCache = {}; gCalCalendarIds = null;
+        gCalAccessToken = null; gCalConnectedEmail = null; gCalEventsCache = {}; gCalCalendarList = null;
         renderGCalSettingsStatus();
         showToast('연결을 해제했어요');
     }
@@ -973,28 +980,55 @@
         const connectBtn = document.getElementById('gcalConnectBtn'), disconnectBtn = document.getElementById('gcalDisconnectBtn');
         if (connectBtn) connectBtn.style.display = gCalAccessToken ? 'none' : '';
         if (disconnectBtn) disconnectBtn.style.display = gCalAccessToken ? '' : 'none';
+        const pickerWrap = document.getElementById('gcalCalendarPicker');
+        if (pickerWrap) { pickerWrap.style.display = gCalAccessToken ? '' : 'none'; if (gCalAccessToken) renderGCalCalendarPicker(); }
+    }
+    // 여러 팀 공유 캘린더까지 다 잡히는 걸 막기 위해, 실제로 가져올 캘린더를 사용자가 직접 고르게 함
+    async function renderGCalCalendarPicker() {
+        const listEl = document.getElementById('gcalCalendarList'); if (!listEl) return;
+        const list = await fetchGCalCalendarList();
+        const selected = effectiveGCalIds(list);
+        listEl.innerHTML = list.map(c => `
+            <label style="display:flex; align-items:center; gap:8px; padding:6px 0; font-size:13px;">
+                <input type="checkbox" value="${escapeHtml(c.id)}" ${selected.includes(c.id) ? 'checked' : ''} class="gcal-cal-check">
+                <span>${escapeHtml(c.summary)}</span>
+            </label>`).join('');
+    }
+    function saveGCalCalendarSelection() {
+        const checked = Array.from(document.querySelectorAll('.gcal-cal-check:checked')).map(el => el.value);
+        if (!checked.length) { showToast('최소 1개는 선택해 주세요'); return; }
+        gCalSelectedIds = checked;
+        gCalEventsCache = {}; // 가져올 캘린더 구성이 바뀌었으니 캐시 비우고 다시 받아오게
+        saveToStorage();
+        showToast('✅ 선택을 저장했어요');
+        if (document.getElementById('tab-check').classList.contains('active')) syncGCalEventsForCheckDate(true);
     }
     // 그 날짜의 구글 캘린더 일정 가져오기 (당일 단위 캐시)
-    let gCalCalendarIds = null; // 이 세션 동안 캘린더 목록 캐시(구독 중인 모든 캘린더 — 팀 공유 캘린더 등 포함)
-    async function fetchGCalCalendarIds() {
-        if (gCalCalendarIds) return gCalCalendarIds;
+    async function fetchGCalCalendarList() {
+        if (gCalCalendarList) return gCalCalendarList;
         try {
             const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
                 headers: { Authorization: 'Bearer ' + gCalAccessToken }
             });
-            if (!res.ok) return ['primary'];
+            if (!res.ok) return [{ id: 'primary', summary: '기본 캘린더' }];
             const data = await res.json();
-            const ids = (data.items || []).map(c => c.id);
-            gCalCalendarIds = ids.length ? ids : ['primary'];
-            return gCalCalendarIds;
-        } catch (e) { return ['primary']; }
+            const list = (data.items || []).map(c => ({ id: c.id, summary: c.summary || c.id }));
+            gCalCalendarList = list.length ? list : [{ id: 'primary', summary: '기본 캘린더' }];
+            return gCalCalendarList;
+        } catch (e) { return [{ id: 'primary', summary: '기본 캘린더' }]; }
+    }
+    // 실제로 조회할 캘린더 id들 — 사용자가 선택해둔 게 있으면 그것만, 없으면(처음) 전체
+    function effectiveGCalIds(list) {
+        if (gCalSelectedIds && gCalSelectedIds.length) return gCalSelectedIds;
+        return list.map(c => c.id);
     }
     async function fetchGCalEventsForDate(dateStr) {
         if (!gCalAccessToken) return { events: [], complete: false };
         if (gCalEventsCache[dateStr]) return gCalEventsCache[dateStr];
         const timeMin = new Date(dateStr + 'T00:00:00').toISOString();
         const timeMax = new Date(dateStr + 'T23:59:59').toISOString();
-        const calIds = await fetchGCalCalendarIds();
+        const calList = await fetchGCalCalendarList();
+        const calIds = effectiveGCalIds(calList);
         let allEvents = [];
         let complete = true; // 캘린더 중 하나라도 조회 실패하면 false — 삭제 감지는 이게 true일 때만 함
         for (const calId of calIds) {
@@ -1143,6 +1177,7 @@
     let memoStore = (saved && Array.isArray(saved.memoStore)) ? saved.memoStore : [];
     let dayEmoji = (saved && saved.dayEmoji && typeof saved.dayEmoji === 'object') ? saved.dayEmoji : {}; // { '2026-08-06': '🚴‍♂️' }
     let dayCoverMemo = (saved && saved.dayCoverMemo && typeof saved.dayCoverMemo === 'object') ? saved.dayCoverMemo : {}; // { '2026-08-06': memoId } 그 날짜의 대표(커버) 사진으로 쓸 메모
+    let gCalSelectedIds = (saved && Array.isArray(saved.gCalSelectedIds)) ? saved.gCalSelectedIds : null; // 구글 캘린더 중 실제로 가져올 캘린더 id들. null=아직 선택 안 함(기본은 전체)
 
     // 기존에 흩어져 있던 메모들을 메모 창고로 1회 이전 (데이터 손실 방지)
     function migrateMemosToStore() {
@@ -3930,7 +3965,7 @@
         memoStore.forEach(m => (m.photos || []).forEach(pid => usedIds.add(pid)));
         const photos = {};
         usedIds.forEach(pid => { if (photoCache[pid]) photos[pid] = photoCache[pid]; });
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, photos };
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, photos };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3956,6 +3991,7 @@
                 memoStore = Array.isArray(parsed.memoStore) ? parsed.memoStore : [];
                 dayEmoji = (parsed.dayEmoji && typeof parsed.dayEmoji === 'object') ? parsed.dayEmoji : {};
                 dayCoverMemo = (parsed.dayCoverMemo && typeof parsed.dayCoverMemo === 'object') ? parsed.dayCoverMemo : {};
+                gCalSelectedIds = Array.isArray(parsed.gCalSelectedIds) ? parsed.gCalSelectedIds : null;
                 if (parsed.photos && typeof parsed.photos === 'object') {
                     Object.keys(parsed.photos).forEach(pid => { photoPut(pid, parsed.photos[pid]); });
                 }
