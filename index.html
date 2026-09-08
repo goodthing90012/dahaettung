@@ -110,7 +110,8 @@
         .cal-memo { position: absolute; top: 2px; right: 3px; font-size: 11px; line-height: 1; }
         .cal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin-top: 4px; }
         .cal-bars { position: absolute; left: 3px; right: 3px; bottom: 3px; display: flex; flex-direction: column; gap: 2px; }
-        .cal-bar { height: 4px; }
+        .cal-bar { height: 13px; }
+        .cal-bar-label { font-size: 9px; line-height: 13px; color: #fff; font-weight: bold; text-align: left; padding-left: 3px; box-sizing: border-box; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
         .cal-today { background: var(--primary); color: white; font-weight: bold; }
         .cal-photo-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%); pointer-events: none; }
         .photo-daynum { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 10px; font-weight: bold; color: #fff; background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 6px; line-height: 1.5; }
@@ -286,7 +287,7 @@
                 <span><span class="lg-mark"><img src="char-allclear.png" style="height:18px; width:auto;"></span> 루틴 올클리어</span>
                 <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block;"></span></span> 일부 완료</span>
                 <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;"></span></span> 안 한 일 남음</span>
-                <span><span class="lg-mark"><span style="width:16px;height:4px;background:#4C6EF5;border-radius:2px;display:inline-block;"></span></span> 프로젝트 기간</span>
+                <span id="calProjectLegend" style="display:contents;"></span>
                 <span><span class="lg-mark">📒</span> 메모 있음</span>
             </div>
         </div>
@@ -1664,13 +1665,17 @@
             else if (dayHasAnyDone(dateStr)) mark = '<div class="cal-dot" style="background:#2563EB;"></div>';
             else if (hasIncomplete) mark = '<div class="cal-dot" style="background:var(--accent);"></div>';
 
+            const dow = (firstDay + d - 1) % 7; // 0=일요일(그 주의 첫 칸) — 프로젝트가 주를 넘겨 이어질 때 이름을 다시 보여주는 기준
             const dayProjects = projects.filter(p => projectActiveOn(p, dateStr)).slice(0, 3);
             let bars = '';
             if (dayProjects.length) {
                 bars = '<div class="cal-bars">' + dayProjects.map(p => {
                     const isStart = p.startDate === dateStr, isEnd = p.endDate === dateStr;
                     const radius = `${isStart ? '3px' : '0'} ${isEnd ? '3px' : '0'} ${isEnd ? '3px' : '0'} ${isStart ? '3px' : '0'}`;
-                    return `<div class="cal-bar" style="background:${p.color}; border-radius:${radius};"></div>`;
+                    const showLabel = isStart || dow === 0; // 시작일이거나, 그 주로 넘어와서도 이어지는 경우 다시 이름 표시
+                    return showLabel
+                        ? `<div class="cal-bar cal-bar-label" style="background:${p.color}; border-radius:${radius};">${escapeHtml(p.name)}</div>`
+                        : `<div class="cal-bar" style="background:${p.color}; border-radius:${radius};"></div>`;
                 }).join('') + '</div>';
             }
 
@@ -1681,6 +1686,18 @@
         }
         html += '</div>';
         el.innerHTML = html;
+
+        // 프로젝트 범례 — 이 달에 걸쳐있는 프로젝트들을 각자의 색상+이름으로 표시
+        const monthStart = `${calYear}-${String(calMonth+1).padStart(2,'0')}-01`;
+        const monthEnd = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
+        const monthProjects = projects.filter(p => p.startDate <= monthEnd && p.endDate >= monthStart)
+            .slice().sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+        const legendEl = document.getElementById('calProjectLegend');
+        if (legendEl) {
+            legendEl.innerHTML = monthProjects.map(p =>
+                `<span><span class="lg-mark"><span style="width:16px;height:4px;background:${p.color};border-radius:2px;display:inline-block;"></span></span> ${escapeHtml(p.name)}</span>`
+            ).join('');
+        }
     }
 
     // 날짜 상세 팝업
