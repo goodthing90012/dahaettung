@@ -103,15 +103,12 @@
         .cal-month { font-size: 17px; font-weight: bold; }
         .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; text-align: center; }
         .cal-dow { font-size: 12px; color: #AAA; padding: 6px 0; }
-        .cal-cell { position: relative; padding: 4px 1px 6px; border-radius: 10px; font-size: 13px; min-height: 82px; display: flex; flex-direction: column; align-items: center; cursor: pointer; box-sizing: border-box; }
+        .cal-cell { position: relative; padding: 4px 1px 6px; border-radius: 10px; font-size: 13px; min-height: 100px; display: flex; flex-direction: column; align-items: center; cursor: pointer; box-sizing: border-box; }
         .cal-cell .daynum { line-height: 1; }
         .cal-mark { font-size: 20px; line-height: 1; margin-top: 2px; height: 23px; }
         .cal-char { height: 58px; width: auto; display: block; margin-top: 1px; }
         .cal-memo { position: absolute; top: 2px; right: 3px; font-size: 11px; line-height: 1; }
         .cal-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin-top: 4px; }
-        .cal-bars { position: absolute; left: 3px; right: 3px; bottom: 3px; display: flex; flex-direction: column; gap: 2px; }
-        .cal-bar { height: 13px; }
-        .cal-bar-label { font-size: 9px; line-height: 13px; color: #fff; font-weight: bold; text-align: left; padding-left: 3px; box-sizing: border-box; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
         .cal-today { background: var(--primary); color: white; font-weight: bold; }
         .cal-photo-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.5) 100%); pointer-events: none; }
         .photo-daynum { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 10px; font-weight: bold; color: #fff; background: rgba(0,0,0,.35); padding: 1px 5px; border-radius: 6px; line-height: 1.5; }
@@ -282,7 +279,10 @@
                 <div class="cal-month" id="calMonthLabel"></div>
                 <button class="cal-nav-btn" onclick="changeMonth(1)">›</button>
             </div>
-            <div id="calGrid"></div>
+            <div style="position:relative;">
+                <div id="calGrid"></div>
+                <div id="calBannerLayer" style="position:absolute; top:0; left:0; right:0; bottom:0; pointer-events:none;"></div>
+            </div>
             <div class="legend">
                 <span><span class="lg-mark"><img src="char-allclear.png" style="height:18px; width:auto;"></span> 루틴 올클리어</span>
                 <span><span class="lg-mark"><span style="width:8px;height:8px;border-radius:50%;background:#2563EB;display:inline-block;"></span></span> 일부 완료</span>
@@ -1665,27 +1665,14 @@
             else if (dayHasAnyDone(dateStr)) mark = '<div class="cal-dot" style="background:#2563EB;"></div>';
             else if (hasIncomplete) mark = '<div class="cal-dot" style="background:var(--accent);"></div>';
 
-            const dow = (firstDay + d - 1) % 7; // 0=일요일(그 주의 첫 칸) — 프로젝트가 주를 넘겨 이어질 때 이름을 다시 보여주는 기준
-            const dayProjects = projects.filter(p => projectActiveOn(p, dateStr)).slice(0, 3);
-            let bars = '';
-            if (dayProjects.length) {
-                bars = '<div class="cal-bars">' + dayProjects.map(p => {
-                    const isStart = p.startDate === dateStr, isEnd = p.endDate === dateStr;
-                    const radius = `${isStart ? '3px' : '0'} ${isEnd ? '3px' : '0'} ${isEnd ? '3px' : '0'} ${isStart ? '3px' : '0'}`;
-                    const showLabel = isStart || dow === 0; // 시작일이거나, 그 주로 넘어와서도 이어지는 경우 다시 이름 표시
-                    return showLabel
-                        ? `<div class="cal-bar cal-bar-label" style="background:${p.color}; border-radius:${radius};">${escapeHtml(p.name)}</div>`
-                        : `<div class="cal-bar" style="background:${p.color}; border-radius:${radius};"></div>`;
-                }).join('') + '</div>';
-            }
-
             const memoIcon = memosOnDate(dateStr).length ? '<span class="cal-memo">📒</span>' : '';
-            html += `<div class="cal-cell ${isToday?'cal-today':''}" onclick="showDateDetail('${dateStr}')">
-                <div class="daynum">${d}</div>${mark}${memoIcon}${bars}
+            html += `<div class="cal-cell ${isToday?'cal-today':''}" data-date="${dateStr}" onclick="showDateDetail('${dateStr}')">
+                <div class="daynum">${d}</div>${mark}${memoIcon}
             </div>`;
         }
         html += '</div>';
         el.innerHTML = html;
+        renderCalProjectBanners(firstDay, daysInMonth);
 
         // 프로젝트 범례 — 이 달에 걸쳐있는 프로젝트들을 각자의 색상+이름으로 표시
         const monthStart = `${calYear}-${String(calMonth+1).padStart(2,'0')}-01`;
@@ -1698,6 +1685,42 @@
                 `<span><span class="lg-mark"><span style="width:16px;height:4px;background:${p.color};border-radius:2px;display:inline-block;"></span></span> ${escapeHtml(p.name)}</span>`
             ).join('');
         }
+    }
+    // 프로젝트 막대를 실제 렌더된 칸의 위치를 재서 여러 칸에 걸친 하나의 배너로 그림(칸 사이 간격 없이 이어지고, 글자도 안 잘림)
+    function renderCalProjectBanners(firstDay, daysInMonth) {
+        const layer = document.getElementById('calBannerLayer');
+        const wrapper = layer ? layer.parentElement : null;
+        if (!layer || !wrapper) return;
+        const wrapperRect = wrapper.getBoundingClientRect();
+        const totalRows = Math.ceil((firstDay + daysInMonth) / 7);
+        const BAR_HEIGHT = 13, BAR_GAP = 2;
+        let bannerHtml = '';
+        for (let row = 0; row < totalRows; row++) {
+            const rowFirstIdx = row * 7 - firstDay + 1; // 이 행의 첫 날짜(월 기준 일, firstDay 앞은 빈칸)
+            const rowStartDay = Math.max(1, rowFirstIdx);
+            const rowEndDay = Math.min(daysInMonth, rowFirstIdx + 6);
+            if (rowStartDay > rowEndDay) continue;
+            const rowStartDate = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(rowStartDay).padStart(2,'0')}`;
+            const rowEndDate = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(rowEndDay).padStart(2,'0')}`;
+            const rowProjects = projects.filter(p => p.startDate <= rowEndDate && p.endDate >= rowStartDate)
+                .slice().sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+            rowProjects.slice(0, 3).forEach((p, lane) => {
+                const segStart = p.startDate > rowStartDate ? p.startDate : rowStartDate;
+                const segEnd = p.endDate < rowEndDate ? p.endDate : rowEndDate;
+                const startCell = wrapper.querySelector(`.cal-cell[data-date="${segStart}"]`);
+                const endCell = wrapper.querySelector(`.cal-cell[data-date="${segEnd}"]`);
+                if (!startCell || !endCell) return;
+                const startRect = startCell.getBoundingClientRect();
+                const endRect = endCell.getBoundingClientRect();
+                const left = startRect.left - wrapperRect.left;
+                const width = endRect.right - startRect.left;
+                const top = (startRect.bottom - wrapperRect.top) - 3 - BAR_HEIGHT - lane * (BAR_HEIGHT + BAR_GAP);
+                const isStart = p.startDate === segStart, isEnd = p.endDate === segEnd;
+                const radius = `${isStart?'3px':'0'} ${isEnd?'3px':'0'} ${isEnd?'3px':'0'} ${isStart?'3px':'0'}`;
+                bannerHtml += `<div style="position:absolute; left:${left}px; width:${width}px; top:${top}px; height:${BAR_HEIGHT}px; background:${p.color}; border-radius:${radius}; font-size:9px; line-height:${BAR_HEIGHT}px; color:#fff; font-weight:bold; padding-left:4px; box-sizing:border-box; white-space:nowrap;">${escapeHtml(p.name)}</div>`;
+            });
+        }
+        layer.innerHTML = bannerHtml;
     }
 
     // 날짜 상세 팝업
