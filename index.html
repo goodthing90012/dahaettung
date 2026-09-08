@@ -907,7 +907,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, gCalDismissedIds }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -1096,6 +1096,7 @@
                 const existing = gcalImportedProject(ev.id);
                 const endDate = ev.endDate || ev.start;
                 if (!existing) {
+                    if (gCalDismissedIds.includes(ev.id)) return; // 사용자가 직접 지운 적 있으면 다시 안 만듦
                     projects.push({
                         id: Date.now() + Math.floor(Math.random() * 100000), name: ev.title, emoji: '📅',
                         color: PROJECT_COLORS[0], startDate: ev.start, endDate, memos: [], tasks: [], gcalEventId: ev.id,
@@ -1114,6 +1115,7 @@
                 const displayName = `${timeLabel} · ${ev.title}`;
                 const existing = gcalImportedTask(ev.id);
                 if (!existing) {
+                    if (gCalDismissedIds.includes(ev.id)) return; // 사용자가 직접 지운 적 있으면 다시 안 만듦
                     standaloneTasks.push({
                         id: Date.now() + Math.floor(Math.random() * 100000), date: evDateStr,
                         name: displayName, done: false, memos: [], gcalEventId: ev.id,
@@ -1198,6 +1200,7 @@
     let dayCoverMemo = (saved && saved.dayCoverMemo && typeof saved.dayCoverMemo === 'object') ? saved.dayCoverMemo : {}; // { '2026-08-06': memoId } 그 날짜의 대표(커버) 사진으로 쓸 메모
     let gCalSelectedIds = (saved && Array.isArray(saved.gCalSelectedIds)) ? saved.gCalSelectedIds : null; // 구글 캘린더 중 실제로 가져올 캘린더 id들. null=아직 선택 안 함(기본은 전체)
     let gCalWasConnected = !!(saved && saved.gCalWasConnected); // 이전에 연결한 적 있으면 새로고침 후 조용히 재연결 시도해봄
+    let gCalDismissedIds = (saved && Array.isArray(saved.gCalDismissedIds)) ? saved.gCalDismissedIds : []; // 사용자가 직접 삭제한 구글 이벤트 id들 — 구글엔 그대로 있어도 다음 동기화 때 다시 안 만듦
 
     // 기존에 흩어져 있던 메모들을 메모 창고로 1회 이전 (데이터 손실 방지)
     function migrateMemosToStore() {
@@ -3105,6 +3108,7 @@
     function deleteProject(id) {
         const p = projects.find(x => x.id === id); if (!p) return;
         askConfirm(`[${p.name}]와(과) 그 안의 모든 할 일을 삭제할까요?`, () => {
+            if (p.gcalEventId) { gCalDismissedIds.push(p.gcalEventId); gCalEventsCache = {}; }
             projects = projects.filter(x => x.id !== id);
             syncAll();
             showToast('🗑️ 삭제됐어요');
@@ -3409,6 +3413,7 @@
         const t = findTask(projectId, taskId); if (!t) return;
         askConfirm(`[${t.name}] 할 일을 삭제할까요?`, () => {
             if (projectId === null || projectId === 'null') {
+                if (t.gcalEventId) { gCalDismissedIds.push(t.gcalEventId); gCalEventsCache = {}; }
                 standaloneTasks = standaloneTasks.filter(x => x.id !== taskId);
             } else {
                 const p = projects.find(x => x.id === projectId); if (!p) return;
@@ -4024,7 +4029,7 @@
         memoStore.forEach(m => (m.photos || []).forEach(pid => usedIds.add(pid)));
         const photos = {};
         usedIds.forEach(pid => { if (photoCache[pid]) photos[pid] = photoCache[pid]; });
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, photos };
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, gCalDismissedIds, photos };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -4052,6 +4057,7 @@
                 dayCoverMemo = (parsed.dayCoverMemo && typeof parsed.dayCoverMemo === 'object') ? parsed.dayCoverMemo : {};
                 gCalSelectedIds = Array.isArray(parsed.gCalSelectedIds) ? parsed.gCalSelectedIds : null;
                 gCalWasConnected = !!parsed.gCalWasConnected;
+                gCalDismissedIds = Array.isArray(parsed.gCalDismissedIds) ? parsed.gCalDismissedIds : [];
                 if (parsed.photos && typeof parsed.photos === 'object') {
                     Object.keys(parsed.photos).forEach(pid => { photoPut(pid, parsed.photos[pid]); });
                 }
