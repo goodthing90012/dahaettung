@@ -105,6 +105,11 @@
         .cal-dow { font-size: 12px; color: #AAA; padding: 6px 0; }
         .cal-cell { position: relative; padding: 4px 1px 6px; border-radius: 10px; font-size: 13px; min-height: 100px; display: flex; flex-direction: column; align-items: center; cursor: pointer; box-sizing: border-box; }
         .cal-cell .daynum { line-height: 1; }
+        .cal-cell.cal-holiday .daynum { color: #E5484D; font-weight: bold; }
+        .cal-cell.cal-today.cal-holiday .daynum { color: #fff; }
+        .cal-hname { font-size: 8.5px; line-height: 1.15; color: #E5484D; margin-top: 2px; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 1px; }
+        .cal-hname.obs { color: #9CA3AF; }
+        .cal-today .cal-hname, .cal-today .cal-hname.obs { color: rgba(255,255,255,.9); }
         .cal-mark { font-size: 20px; line-height: 1; margin-top: 2px; height: 23px; }
         .cal-char { height: 58px; width: auto; display: block; margin-top: 1px; }
         .cal-memo { position: absolute; top: 2px; right: 3px; font-size: 11px; line-height: 1; }
@@ -924,7 +929,7 @@
     }
     function saveToStorage() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, gCalDismissedIds }));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, gCalDismissedIds, gCalHolidays }));
             localStorage.setItem(STORAGE_KEY + '_savedAt', String(Date.now()));
             updateLastSavedLabel();
         } catch (e) {
@@ -1123,14 +1128,16 @@
             });
             if (!res.ok) return [{ id: 'primary', summary: '기본 캘린더' }];
             const data = await res.json();
-            const list = (data.items || []).map(c => ({ id: c.id, summary: c.summary || c.id }));
+            // 공휴일 캘린더(구독해둔 경우)는 프로젝트/할 일로 가져오지 않음 — 공휴일은 달력 표시 전용으로 따로 받음
+            const list = (data.items || []).filter(c => !isGCalHolidayCalId(c.id)).map(c => ({ id: c.id, summary: c.summary || c.id }));
             gCalCalendarList = list.length ? list : [{ id: 'primary', summary: '기본 캘린더' }];
             return gCalCalendarList;
         } catch (e) { return [{ id: 'primary', summary: '기본 캘린더' }]; }
     }
     // 실제로 조회할 캘린더 id들 — 사용자가 선택해둔 게 있으면 그것만, 없으면(처음) 전체
+    function isGCalHolidayCalId(id) { return /#holiday@group\.v\.calendar\.google\.com$/.test(String(id || '')); }
     function effectiveGCalIds(list) {
-        if (gCalSelectedIds && gCalSelectedIds.length) return gCalSelectedIds;
+        if (gCalSelectedIds && gCalSelectedIds.length) return gCalSelectedIds.filter(id => !isGCalHolidayCalId(id));
         return list.map(c => c.id);
     }
     const GCAL_DAYS_BEHIND = 3;  // 혹시 모를 최근 과거 변경사항까지 살짝 포함
@@ -1176,6 +1183,48 @@
         gCalEventsCache[cacheKey] = result;
         return result;
     }
+    // 구글 공개 '대한민국 공휴일' 캘린더에서 올해~내년 공휴일을 받아 gCalHolidays에 저장
+    // (대체공휴일·임시공휴일도 구글이 올려두면 그대로 반영). 기념일(어버이날 등)은 off=false로 구분해 회색으로만 표시.
+    const GCAL_HOLIDAY_CAL_ID = 'ko.south_korea#holiday@group.v.calendar.google.com';
+    let gCalHolidaysFetchedThisSession = false;
+    async function fetchGCalHolidays(force) {
+        if (!gCalAccessToken) return false;
+        if (gCalHolidaysFetchedThisSession && !force) return false;
+        const y = new Date().getFullYear();
+        const timeMin = new Date(`${y}-01-01T00:00:00`).toISOString();
+        const timeMax = new Date(`${y + 1}-12-31T23:59:59`).toISOString();
+        const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(GCAL_HOLIDAY_CAL_ID)}/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=250`;
+        try {
+            const res = await fetch(url, { headers: { Authorization: 'Bearer ' + gCalAccessToken } });
+            if (!res.ok) return false;
+            const data = await res.json();
+            const next = {};
+            (data.items || []).forEach(ev => {
+                if (!ev.start || !ev.start.date || ev.status === 'cancelled') return;
+                const desc = String(ev.description || '');
+                const off = !/기념일|Observance/i.test(desc); // 구글은 쉬는 날은 '공휴일', 아닌 날은 '기념일'로 설명을 붙임
+                const name = String(ev.summary || '공휴일').trim();
+                let d = ev.start.date;
+                const last = ev.end && ev.end.date ? addDaysStr(ev.end.date, -1) : d; // 종일 end.date는 배타적
+                for (let guard = 0; d <= last && guard < 10; guard++, d = addDaysStr(d, 1)) {
+                    const prev = next[d];
+                    if (!prev) next[d] = { name, off };
+                    else if (off && !prev.off) next[d] = { name, off }; // 같은 날 공휴일+기념일이면 공휴일 우선
+                    else if (off === prev.off && !prev.name.includes(name)) prev.name += ', ' + name;
+                }
+            });
+            gCalHolidaysFetchedThisSession = true;
+            // 받아온 기간(올해~내년)만 교체하고 그 밖(작년 등)은 기존 값 유지
+            const merged = {};
+            Object.keys(gCalHolidays).forEach(k => { if (k < `${y}-01-01` || k > `${y + 1}-12-31`) merged[k] = gCalHolidays[k]; });
+            Object.assign(merged, next);
+            const changed = JSON.stringify(merged) !== JSON.stringify(gCalHolidays);
+            gCalHolidays = merged;
+            if (changed) { saveToStorage(); if (typeof renderCalendar === 'function' && document.getElementById('calGrid')) renderCalendar(); }
+            return changed;
+        } catch (e) { return false; }
+    }
+    function holidayOn(dateStr) { return gCalHolidays[dateStr] || null; }
     // 이 구글 이벤트가 이미 프로젝트/할일로 들어와 있는지
     function gcalImportedProject(gcalEventId) {
         return projects.find(p => p.gcalEventId === gcalEventId) || null;
@@ -1195,6 +1244,7 @@
         const rangeStart = addDaysStr(getTodayStr(), -GCAL_DAYS_BEHIND);
         const rangeEnd = addDaysStr(getTodayStr(), GCAL_DAYS_AHEAD);
         if (forceRefresh) gCalEventsCache = {}; // 강제 동기화는 캐시 무시하고 새로 받아옴
+        fetchGCalHolidays(forceRefresh); // 공휴일은 따로(프로젝트/할 일로 만들지 않음). 세션당 1번 + 수동 동기화 때 갱신
         const { events, complete } = await fetchGCalEventsInRange(rangeStart, rangeEnd);
         let created = 0, updated = 0, deleted = 0;
         const seenIds = {};
@@ -1308,6 +1358,7 @@
     let dayCoverMemo = (saved && saved.dayCoverMemo && typeof saved.dayCoverMemo === 'object') ? saved.dayCoverMemo : {}; // { '2026-08-06': memoId } 그 날짜의 대표(커버) 사진으로 쓸 메모
     let gCalSelectedIds = (saved && Array.isArray(saved.gCalSelectedIds)) ? saved.gCalSelectedIds : null; // 구글 캘린더 중 실제로 가져올 캘린더 id들. null=아직 선택 안 함(기본은 전체)
     let gCalWasConnected = !!(saved && saved.gCalWasConnected); // 이전에 연결한 적 있으면 새로고침 후 조용히 재연결 시도해봄
+    let gCalHolidays = (saved && saved.gCalHolidays && typeof saved.gCalHolidays === 'object') ? saved.gCalHolidays : {}; // { '2026-10-03': { name: '개천절', off: true } } 구글 공휴일 캘린더에서 받아와 저장(로그인 안 해도 계속 보임)
     let gCalDismissedIds = (saved && Array.isArray(saved.gCalDismissedIds)) ? saved.gCalDismissedIds : []; // 사용자가 직접 삭제한 구글 이벤트 id들 — 구글엔 그대로 있어도 다음 동기화 때 다시 안 만듦
 
     // 기존에 흩어져 있던 메모들을 메모 창고로 1회 이전 (데이터 손실 방지)
@@ -1777,8 +1828,10 @@
             else if (hasIncomplete) mark = '<div class="cal-dot" style="background:var(--accent);"></div>';
 
             const memoIcon = memosOnDate(dateStr).length ? '<span class="cal-memo">📒</span>' : '';
-            html += `<div class="cal-cell ${isToday?'cal-today':''}" data-date="${dateStr}" onclick="showDateDetail('${dateStr}')">
-                <div class="daynum">${d}</div>${mark}${memoIcon}
+            const hol = holidayOn(dateStr);
+            const holName = hol ? `<div class="cal-hname ${hol.off ? '' : 'obs'}">${escapeHtml(hol.name)}</div>` : '';
+            html += `<div class="cal-cell ${isToday?'cal-today':''} ${hol && hol.off ? 'cal-holiday' : ''}" data-date="${dateStr}" onclick="showDateDetail('${dateStr}')">
+                <div class="daynum">${d}</div>${holName}${mark}${memoIcon}
             </div>`;
         }
         html += '</div>';
@@ -2554,7 +2607,8 @@
         renderGCalSyncStatus();
         const isToday = checkDateStr === getTodayStr();
         const isFuture = checkDateStr > getTodayStr();
-        document.getElementById('checkDateLabel').textContent = isToday ? `오늘 · ${krLabel(checkDateStr)}` : (isFuture ? `예정 · ${krLabel(checkDateStr)}` : krLabel(checkDateStr));
+        const checkHol = holidayOn(checkDateStr);
+        document.getElementById('checkDateLabel').textContent = (isToday ? `오늘 · ${krLabel(checkDateStr)}` : (isFuture ? `예정 · ${krLabel(checkDateStr)}` : krLabel(checkDateStr))) + (checkHol ? ` · ${checkHol.name}` : '');
         document.getElementById('checkDateNext').style.visibility = 'visible';
         document.getElementById('checkTodayBtn').disabled = isToday;
         const rc = routineDayStatus(checkDateStr);
@@ -4137,7 +4191,7 @@
         memoStore.forEach(m => (m.photos || []).forEach(pid => usedIds.add(pid)));
         const photos = {};
         usedIds.forEach(pid => { if (photoCache[pid]) photos[pid] = photoCache[pid]; });
-        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, gCalDismissedIds, photos };
+        const data = { exportedAt: new Date().toISOString(), app: 'dahaettung', version: 1, routines, projects, standaloneTasks, cycleRoutines, weekdayRoutines, memoStore, dayEmoji, dayCoverMemo, gCalSelectedIds, gCalWasConnected, gCalDismissedIds, gCalHolidays, photos };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -4166,6 +4220,7 @@
                 gCalSelectedIds = Array.isArray(parsed.gCalSelectedIds) ? parsed.gCalSelectedIds : null;
                 gCalWasConnected = !!parsed.gCalWasConnected;
                 gCalDismissedIds = Array.isArray(parsed.gCalDismissedIds) ? parsed.gCalDismissedIds : [];
+                gCalHolidays = (parsed.gCalHolidays && typeof parsed.gCalHolidays === 'object') ? parsed.gCalHolidays : {};
                 if (parsed.photos && typeof parsed.photos === 'object') {
                     Object.keys(parsed.photos).forEach(pid => { photoPut(pid, parsed.photos[pid]); });
                 }
