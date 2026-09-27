@@ -1,0 +1,46 @@
+# 다했텅 저녁 알림 — 매일 밤 폰으로 "체크할 시간" 푸시 신호를 보낸다.
+# 알림 내용(안 한 항목 목록)은 폰 안의 앱 데이터로 만들어지고, 여기선 신호만 보냄(체크 데이터는 GitHub에 안 올라감).
+#
+# 필요한 Secret 2개 (Settings → Secrets and variables → Actions):
+#   VAPID_PRIVATE_KEY  : Claude가 알려준 비밀 키
+#   PUSH_SUBSCRIPTION  : 앱 설정 탭 "🔔 저녁 알림"에서 복사한 코드
+#
+# 시간 바꾸기: cron은 UTC 기준(한국시간 - 9시간). GitHub 예약 작업은 보통 5~20분 늦게 돌아서 조금 일찍 잡아둠.
+#   '45 11 * * *' = 한국시간 20:45 예약 → 대략 21시 전후 도착
+name: daily-reminder
+
+on:
+  schedule:
+    - cron: '45 11 * * *'
+  workflow_dispatch: {} # Actions 탭에서 "Run workflow"로 바로 테스트 가능
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Send push
+        env:
+          VAPID_PUBLIC_KEY: BGgltDwV7SUcJT116bYtp35K26n6JpSkNUCSbeKKnYDSthis1xa6QMo7qyfDkt29Ie9qb4ezMPOUtCN_Uf-kChE
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+        run: |
+          npm install --no-save --silent web-push@3
+          node -e '
+            const webpush = require("web-push");
+            if (!process.env.VAPID_PRIVATE_KEY || !process.env.PUSH_SUBSCRIPTION) {
+              console.error("Secret(VAPID_PRIVATE_KEY / PUSH_SUBSCRIPTION)이 등록되지 않았어요"); process.exit(1);
+            }
+            webpush.setVapidDetails("https://goodthing90012.github.io/dahaettung/", process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+            const sub = JSON.parse(process.env.PUSH_SUBSCRIPTION);
+            webpush.sendNotification(sub, JSON.stringify({ type: "daily-reminder" }), { TTL: 3 * 60 * 60, urgency: "high" })
+              .then(r => console.log("보냄:", r.statusCode))
+              .catch(e => {
+                if (e.statusCode === 404 || e.statusCode === 410) {
+                  console.error("폰 쪽 알림 등록이 만료됐어요. 앱 설정 → 저녁 알림에서 코드를 다시 복사해 PUSH_SUBSCRIPTION을 갱신하세요.");
+                } else { console.error("발송 실패:", e.statusCode, e.body || e.message); }
+                process.exit(1);
+              });
+          '
