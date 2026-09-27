@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dahaettung-v165';
+const CACHE_NAME = 'dahaettung-v166';
 
 const ASSETS = [
   './',
@@ -168,14 +168,20 @@ self.addEventListener('push', (e) => { e.waitUntil(showDailyReminder()); });
 self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'reminder-preview') e.waitUntil(showDailyReminder());
 });
+// 알림 클릭: 이미 열린 다했텅 창이 있으면 앞으로 띄우고 "오늘 체크 탭" 신호만 보냄(새로고침 없이),
+// 없거나 실패하면 새로 연다. (예전엔 navigate()로 이동하다 실패하면 아무것도 안 열리는 버그가 있었음)
+async function openFromReminder(targetUrl) {
+  const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const win = wins.find((w) => w.url.startsWith(self.registration.scope));
+  if (win) {
+    win.postMessage({ type: 'open-check-today' }); // 체크 탭 전환 신호는 먼저 보내둠(포커스 성공 여부와 무관)
+    try { return await win.focus(); }
+    catch (err) { /* 앞으로 띄우기 실패하면 아래에서 새로 열기 */ }
+  }
+  return clients.openWindow(targetUrl);
+}
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const target = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
-  e.waitUntil((async () => {
-    const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const w of wins) {
-      if (w.url.startsWith(self.registration.scope) && 'navigate' in w) { await w.navigate(target); return w.focus(); }
-    }
-    return clients.openWindow(target);
-  })());
+  e.waitUntil(openFromReminder(target));
 });

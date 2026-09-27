@@ -4275,6 +4275,12 @@
         checkPendingShare();
         writeReminderSnapshot();
         // 저녁 알림을 눌러서 들어온 경우 오늘 체크 탭으로 바로 이동
+        // 이미 앱이 열려 있을 때 알림을 누르면 서비스워커가 이 신호를 보냄
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (e) => {
+                if (e.data && e.data.type === 'open-check-today') { checkDateStr = getTodayStr(); switchTab('check'); }
+            });
+        }
         if (new URLSearchParams(location.search).get('from') === 'reminder') {
             checkDateStr = getTodayStr();
             switchTab('check');
