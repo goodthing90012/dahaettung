@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dahaettung-v164';
+const CACHE_NAME = 'dahaettung-v165';
 
 const ASSETS = [
   './',
@@ -115,4 +115,67 @@ self.addEventListener('fetch', (e) => {
       })
     );
   }
+});
+
+// ── 저녁 알림: GitHub Actions가 매일 밤 푸시 신호를 보내면, 앱이 적어둔 스냅샷을 읽어 "아직 안 한 것"을 보여줌 ──
+function openReminderDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('dahaettung-reminder', 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('kv'); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function readReminderSnapshot() {
+  try {
+    const db = await openReminderDB();
+    const snap = await new Promise((resolve) => {
+      const r = db.transaction('kv', 'readonly').objectStore('kv').get('snapshot');
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    });
+    db.close();
+    return snap;
+  } catch (e) { return null; }
+}
+function localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// 알림 문구 결정 — 스냅샷에 오늘 데이터가 없으면(앱을 2주 넘게 안 열었거나 처음) 일반 안내로 대체
+function buildReminder(snap, todayStr) {
+  const day = snap && snap.days ? snap.days[todayStr] : null;
+  if (!day) return { title: '다했텅 체크할 시간이에요', body: '오늘 한 일을 체크해 보세요 💚' };
+  if (day.total === 0) return null; // 오늘 할 게 아예 없으면 조용히(아래서 최소 알림 처리)
+  if (day.pending.length === 0) return { title: '🎉 오늘 올클리어!', body: '다 했텅! 수고했어요 💚' };
+  const shown = day.pending.slice(0, 4).join(' · ');
+  const more = day.pending.length > 4 ? ` 외 ${day.pending.length - 4}개` : '';
+  return { title: `📋 아직 안 한 게 ${day.pending.length}개 있어요`, body: shown + more };
+}
+async function showDailyReminder() {
+  const snap = await readReminderSnapshot();
+  const msg = buildReminder(snap, localDateStr(new Date()))
+    || { title: '다했텅', body: '오늘은 등록된 일정이 없어요' }; // 푸시는 반드시 알림을 띄워야 해서 최소 문구
+  return self.registration.showNotification(msg.title, {
+    body: msg.body,
+    icon: './icon-192.png',
+    badge: './icon-192.png',
+    tag: 'daily-reminder', // 같은 날 여러 번 와도 하나로 덮어씀
+    renotify: true,
+    data: { url: './?from=reminder' },
+  });
+}
+self.addEventListener('push', (e) => { e.waitUntil(showDailyReminder()); });
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'reminder-preview') e.waitUntil(showDailyReminder());
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const target = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil((async () => {
+    const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of wins) {
+      if (w.url.startsWith(self.registration.scope) && 'navigate' in w) { await w.navigate(target); return w.focus(); }
+    }
+    return clients.openWindow(target);
+  })());
 });
